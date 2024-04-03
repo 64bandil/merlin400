@@ -1,0 +1,7 @@
+from pathlib import Path
+
+LOGS_DIRECTORY = Path.cwd() / "logs"
+MUTE_LOGGING = False
+BATCH_LOGGING = False
+HEARTBEAT_TIMEOUT_SECONDS = 120
+ALCOHOL_SENSOR_ENABLED = False
