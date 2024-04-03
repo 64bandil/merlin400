@@ -2,7 +2,6 @@ import atexit
 import ctypes
 import enum
 import os
-import pickle
 import socket
 import sqlite3
 import sys
@@ -10,13 +9,13 @@ import threading
 import time
 import signal
 import subprocess
-import traceback
 
 from queue import Queue
 from time import sleep
 from datetime import datetime
 
 from common import utils
+import system_setup
 from common.settings import HEARTBEAT_TIMEOUT_SECONDS, ALCOHOL_SENSOR_ENABLED
 from hardware.module_HardwareControlSystem import (
     module_HardwareControlSystem,
@@ -79,7 +78,7 @@ class ControlThread(threading.Thread):
         # store in_queue in local object
         self._in_queue = in_queue
 
-        self.device_version = utils.get_device_version()
+        self.device_version = system_setup.get_device_version()
 
         # Initialize hardware here
         self._logger.info(
@@ -226,7 +225,6 @@ class ControlThread(threading.Thread):
 
         device_is_paused = self._myHardwareControlSystem.FSM.fsmData["pause_flag"]
         device_is_running = self._myHardwareControlSystem.FSM.fsmData["running_flag"]
-        user_initials = ""
 
         if (
             program_params
@@ -244,44 +242,6 @@ class ControlThread(threading.Thread):
                 self._myHardwareControlSystem._config["SYSTEM"]["soak_time_seconds"] = str(soak_time)
                 self._myHardwareControlSystem.store_config()
                 self._logger.info("Setting soak time to {} seconds.".format(program_params["soakTime"]))
-
-        if program_params and "initials" in program_params and program_params["initials"]:
-            user_initials = program_params["initials"]
-
-        if action == "upgrade":
-            try:
-                self._logger.info("Updating software...")
-                self._updating = True
-                # flash all LED's to indicate an update in progress
-                self._myHardwareControlSystem._myphysicalinterface.set_state(
-                    module_physicalinterface.DeviceState.UPDATING
-                )
-                utils.update()
-                self._updating = False
-                self._logger.info("Software update completed.")
-            except Exception as e:
-                self._updating = False
-                self._logger.exception("Software update failed:")
-                return
-
-        if action == "sendlog":
-            def callback():
-                initial_state = self._myHardwareControlSystem.FSM.curHandle
-                self._myHardwareControlSystem._myphysicalinterface.do_flash_green_3sec()
-                if initial_state == "Ready":
-                    self._myHardwareControlSystem._myphysicalinterface.set_state(
-                        module_physicalinterface.DeviceState.READY, force_physical_update=True
-                    )
-                self._logger.info("Logs to the AWS has been sent.")
-
-            try:
-                self._logger.info("Sending log to AWS...")
-                self._myHardwareControlSystem._myphysicalinterface.do_red_light()
-                flush_logger()
-                utils.upload_log_files(user_initials=user_initials, problem=message.get("problemDescription", ""), callback=callback)
-            except Exception as e:
-                self._logger.exception("Failed to send logs to AWS:")
-                return
 
         # In order to start program device should not be already running and should not be paused.
         if action == "start" and program and not device_is_paused and not device_is_running:
@@ -376,7 +336,7 @@ class ControlThread(threading.Thread):
 
     def get_unique_id(self):
         if not self._device_id:
-            self._device_id = utils.get_unique_id()
+            self._device_id = system_setup.get_unique_id()
         return self._device_id
 
 
@@ -1184,8 +1144,8 @@ class ControlThread(threading.Thread):
             "gas_temp": self._myHardwareControlSystem.gas_temperature,
             "bottom_heater": self._myHardwareControlSystem.bottom_temperature,
             "firmwareVersion": self.version,
-            "machine_id": utils.getserial(),
-            "unique_id" : utils.get_unique_id(),
+            "machine_id": system_setup.getserial(),
+            "unique_id" : system_setup.get_unique_id(),
         }
 
         status.update(self._myHardwareControlSystem.valve_status)
@@ -1432,64 +1392,6 @@ class SocketControl:
                     )
                     command = None
 
-                reply_dict = {}
-
-                if command == "status":
-                    # wait for command to be processed
-                    # arrange data into a JSON / Dict format and send it using Pickle
-                    reply_dict = self.myControlObject.get_machine_json_status()
-                    reply_dict["reply"] = "Got status data"
-                elif command == "update_soft":
-                    # Start update process
-                    reply_dict["reply"] = "Updating software..."
-                elif command == "send_logs":
-                    # Upload last 7 days of log data to s3 bucket.
-                    reply_dict["reply"] = "Uploading log files..."
-                elif command == "get_serial":
-                    # fetch machine unique ID
-                    reply_dict["reply"] = self.myControlObject.get_unique_id()
-                elif command == "blink_fast":
-                    self.myControlObject._myHardwareControlSystem.do_fast_blink()
-                    reply_dict["reply"] = "blink fast done"
-                elif command == "blink_slow":
-                    self.myControlObject._myHardwareControlSystem.do_slow_blink()
-                    reply_dict["reply"] = "blink slow done"
-                elif command == "print_stack":
-                    reply = ""
-                    for th in threading.enumerate():
-                        try:
-                            reply += "{}\n".format(th)
-                            reply += "-"*80 + "\n"
-                            reply += "\n".join(traceback.format_stack(sys._current_frames()[th.ident]))
-                            reply += "\n"
-                        except KeyError:
-                            pass
-                    self._logger.info("Current stack:\n{}".format(reply))
-                    reply_dict["reply"] = reply
-                elif command == "quit":
-                    # wait for command to be processed
-                    self._q.put(command)
-                    reply_dict = {"reply": "Terminating server"}
-                    self._logger.debug("Attempting to terminate control thread")
-                    self.myControlObject.stop()
-                    self.myControlObject.join()
-                    self._logger.debug("Control thread has stopped")
-                else:
-                    # Pass user input to ControlThread
-                    self._q.put(command)
-                    # wait for command to be processed
-                    sleep(0.3)
-                    # send reply from main thread
-                    reply_dict = {"reply": self.myControlObject._user_feedback}
-
-                pickle_data = pickle.dumps(reply_dict)
-                c.send(pickle_data)
-                c.close()
-            except KeyboardInterrupt:
-                command = "quit"
-                self.myControlObject.stop()
-                self.myControlObject.join()
-
             except socket.timeout:
                 pass
 
@@ -1502,31 +1404,6 @@ class SocketControl:
                 )
                 raise
 
-            if command == "quit":
-                self._logger.info("Shutting down Socket")
-                self.shutdown()
-                self._logger.info("Socket shut down")
-                sleep(1)
-                self._logger.info("Quitting application")
-                sys.exit(0)
-            elif command == "update_soft":
-                try:
-                    self._logger.info("Updating software...")
-                    self.myControlObject._updating = True
-                    # flash all LED's to indicate an update in progress
-                    self.myControlObject._myHardwareControlSystem._myphysicalinterface.set_state(
-                        module_physicalinterface.DeviceState.UPDATING
-                    )
-                    utils.update()
-                    self._logger.info("Software update completed.")
-                except Exception as e:
-                    self._logger.exception("Software update failed: {!r}".format(e))
-                finally:
-                    self.myControlObject._updating = False
-            elif command == "send_logs":
-                flush_logger()
-                utils.upload_log_files()
-
             time.sleep(0.5)
 
 """
@@ -1538,7 +1415,7 @@ def main():
     module_logger.info("Starting drizzle control v1.1")
 
     #check for sd card move
-    utils.update_sd_card_data()
+    system_setup.update_sd_card_data()
 
     mySocketApplication = SocketControl()
     mySocketApplication.main()
