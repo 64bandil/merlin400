@@ -11,7 +11,7 @@ import atexit
 
 from common.module_logging import get_app_logger
 from common import utils
-
+import system_setup
 
 class NotSupportedFanError(Exception):
     """Raise when hardware doesn't support fan."""
@@ -100,9 +100,9 @@ class module_fancontrol:
         #read the ADC channel
         raw_adc = self._get_ADC_reading()
 
-        if self.device_version == utils.DEVICE_V1:
+        if self.device_version == system_setup.DEVICE_V1:
             current_level = None
-        elif self.device_version == utils.DEVICE_V2 and self._chip_type == module_ADC_driver.CHIP_NCD9830:
+        elif self.device_version == system_setup.DEVICE_V2 and self._chip_type == module_ADC_driver.CHIP_NCD9830:
             # interpolate calibration values to get celcius result
             self._logger.info('Got NCD9830, level is: {}'.format(raw_adc))
             if raw_adc < self.ADC_LEVEL_NCD9830_ON_HIGH and raw_adc > self.ADC_LEVEL_NCD9830_ON_LOW:
@@ -113,7 +113,7 @@ class module_fancontrol:
                 current_level = self.FAN_ADC_LEVEL_OFF
             else:
                 current_level = self.FAN_ADC_LEVEL_ERROR
-        elif self.device_version == utils.DEVICE_V2 and self._chip_type == module_ADC_driver.CHIP_ADS7828:
+        elif self.device_version == system_setup.DEVICE_V2 and self._chip_type == module_ADC_driver.CHIP_ADS7828:
             self._logger.info('Got ADS7828, level is: {}'.format(raw_adc))
             if raw_adc < self.ADC_LEVEL_ADS7828_ON_HIGH and raw_adc > self.ADC_LEVEL_ADS7828_ON_LOW:
                 #fan is ON
