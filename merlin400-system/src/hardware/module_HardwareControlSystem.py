@@ -1,15 +1,12 @@
 """
 Control class for drizzle extractor
-Instantized from the GUI module.
+Instantized from ControlThread
 """
-
 if __name__ == "__main__":
   #Add root folder (/src/) to paths for import if this script is run standalone
   from pathlib import Path
   import sys
   sys.path.append(str(Path(__file__).resolve().parent.parent))
-  print(sys.path)
-
 
 import atexit
 import configparser
@@ -21,9 +18,8 @@ from timeit import default_timer as timer
 
 import smbus
 
-import hardware.module_math as math
-
 # import all required hardware modules here
+import hardware.module_math as math
 import hardware.module_FSM as module_FSM
 import hardware.components.module_steppervalvecontrol as module_steppervalvecontrol  # Module to control valves. Also required the pca9685 driver
 import hardware.components.module_thermistorinput as module_thermistorinput  # Module to read thermistors over the ADC
@@ -73,18 +69,14 @@ INIT_STATUS_ALCOHOL_SENSOR_ERROR = 7
 class HardwareFailure(Exception):
     """Raise when hardware failure encointered."""
 
-
 class ElectricalError(HardwareFailure):
     """Raise when there is a problem with i2c or other electrical error."""
-
 
 class UserPanelError(HardwareFailure):
     """Raise when there is a problem with user panel."""
 
-
 class PressureSensorFailure(HardwareFailure):
     """Raise when problem with pressure sensor detected."""
-
 
 
 class module_HardwareControlSystem(Machine):
@@ -529,7 +521,7 @@ class module_HardwareControlSystem(Machine):
 
             _config["FSM_EX"] = {
                 "min_delta_pressure": "-2",
-                "maximum_vacuum_pressure": "225",
+                "maximum_vacuum_pressure": "300",
                 "maximum_vacuum_time": "120",
                 "tube_filling_vacuum": "300",
                 "max_pressure_loss_evc": "2.5",
