@@ -9,9 +9,7 @@ class Command_Reset(BaseCommand):
         self._logger = get_app_logger(str(self.__class__))
 
     def validate_state(self, hardwareControlSystem: module_HardwareControlSystem):
-        # may only run if state is DistillBulk, otherwise just ignore or is in pause mode
-        if hardwareControlSystem.FSM.curHandle != "DistillBulk":
-            raise Exception("Machine is in wrong mode, ignore pause request")
+        return
 
     def execute(self, hardwareControlSystem: module_HardwareControlSystem):
         self._logger.info("Resetting!!!")
