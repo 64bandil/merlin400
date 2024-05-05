@@ -1,19 +1,10 @@
-import atexit
 import enum
-import os
-import pickle
-import socket
 import sqlite3
 import sys
 import threading
 import time
-import signal
-
-from queue import Queue
-from time import sleep
 from datetime import datetime
 
-from common import utils
 import system_setup
 from common.settings import HEARTBEAT_TIMEOUT_SECONDS, ALCOHOL_SENSOR_ENABLED
 from hardware.module_HardwareControlSystem import (
@@ -23,10 +14,22 @@ from hardware.module_HardwareControlSystem import (
 )
 from hardware.components.module_physicalinterface import module_physicalinterface
 from hardware.components.module_fancontrol import NotSupportedFanError, module_fancontrol
-
 from hardware.module_FSM import FailureMode
-from common.module_logging import setup_logging, get_app_logger
+from common.module_logging import get_app_logger
 from hardware.commands.basecommand import BaseCommand
+
+from hardware.commands.start_extraction import Command_StartExtraction
+from hardware.commands.start_heat_oil import Command_StartHeatOil
+from hardware.commands.start_clean_pump import Command_StartCleanPump
+from hardware.commands.start_decarb import Command_StartDecarb
+from hardware.commands.start_distill import Command_StartDistill
+from hardware.commands.start_vent_pump import Command_StartVentPump
+from hardware.commands.pause_program import Command_PauseProgram
+from hardware.commands.resume_program import Command_ResumeProgram
+from hardware.commands.reset import Command_Reset
+from hardware.commands.clean_valve import Command_CleanValve
+
+
 
 if ALCOHOL_SENSOR_ENABLED:
     from hardware.components.module_alcoholsensor import module_alcoholsensor
@@ -290,8 +293,7 @@ class ControlThread(threading.Thread):
             # self._myHardwareControlSystem.show_error_code_in_display()
             # Transition to Error state.
             self._myHardwareControlSystem.FSM.ToTransistion("toStateError")
-
-        # # ALCOHOL CHECK STOP
+    # # ALCOHOL CHECK STOP
 
     def check_fan_is_off(self):
         try:
@@ -313,13 +315,12 @@ class ControlThread(threading.Thread):
             # This exception means that device does't support fan and there is nothing to do.
             self._logger.info("Fan not supported on this hardware.")
 
+
     def schedule_command_for_execution(self, command: BaseCommand):        
         command.validate_state(self._myHardwareControlSystem)
         self._scheduledCommand=command
 
-#-----------------------------------------------------------------------------------------
-# Functions for returning operational status of machine
-#-----------------------------------------------------------------------------------------
+    #Reads values from hardware and updates _statusObject. Invoked by control thread.
     def update_app_status(self):
         try:
             pressure = self._myHardwareControlSystem.pressure
@@ -327,36 +328,37 @@ class ControlThread(threading.Thread):
             pressure = None
 
         status = {
-            "machine_id": system_setup.getserial(),
-            "unique_id" : system_setup.get_unique_id(),
-            "firmwareVersion": self.version,
+            "deviceInfo" : {
+                "machine_id": system_setup.getserial(),
+                "unique_id" : system_setup.get_unique_id(),
+                "firmwareVersion": self.version,
+                "runMinutesSince": self._distill_runtime_total,
+                "sinceDate": self._since_date,
+            },
+            "hardwareStatus": {
+                "current_status": self._myHardwareControlSystem.FSM.curHandle,
+                "pump_power": self._myHardwareControlSystem.pump_value,
+                "heater_pct": self._myHardwareControlSystem.bottom_heater_percent,
+                "fan_pwm": self._myHardwareControlSystem.fan_value,
+                "fan_adc_value": self._myHardwareControlSystem._fan_control.fan_adc_value,
+                "fan_adc_check": self._myHardwareControlSystem._fan_control.fan_adc_check_string,
+                "pressure": pressure,
+                "gas_temp": self._myHardwareControlSystem.gas_temperature,
+                "bottom_heater_power": self._myHardwareControlSystem.bottom_heater_percent,
+                "bottom_heater_temperature": self._myHardwareControlSystem.bottom_temperature,
+            },
 
             "machineState": "idle",
-            "runMinutesSince": self._distill_runtime_total,
-            "sinceDate": self._since_date,
             "timestamp": int(time.time()),
-
-            "current_status": self._myHardwareControlSystem.FSM.curHandle,
-
-            "pump_power": self._myHardwareControlSystem.pump_value,
-            "heater_pct": self._myHardwareControlSystem.bottom_heater_percent,
-            "fan_pwm": self._myHardwareControlSystem.fan_value,
-            "fan_adc_value": self._myHardwareControlSystem._fan_control.fan_adc_value,
-            "fan_adc_check": self._myHardwareControlSystem._fan_control.fan_adc_check_string,
-            "pressure": self._myHardwareControlSystem.pressure,
-            "gas_temp": self._myHardwareControlSystem.gas_temperature,
-            "bottom_heater": self._myHardwareControlSystem.bottom_temperature,
 
             "activeProgram": {
                 "warning": None,
-                "temperature": self._myHardwareControlSystem.bottom_temperature,
-                "pressure": pressure,
                 "progress": 0,
                 "programId": "none",
                 "currentAction": None,
                 "estimatedTimeLeft": None,
                 "timeElapsed": None,
-                "power": self._myHardwareControlSystem.bottom_heater_percent,
+                "errorMessage": None,
             },
 
             "programParameters": {
@@ -370,8 +372,6 @@ class ControlThread(threading.Thread):
                 "final_air_cycles_time_open": self._myHardwareControlSystem._config["FSM_EV"]["final_air_cycles_time_open"],
                 "final_air_cycles_time_closed": self._myHardwareControlSystem._config["FSM_EV"]["final_air_cycles_time_closed"],
             },
-
-            "log": "",
         }
 
         if self._myHardwareControlSystem.FSM.curHandle == "Ready":
@@ -379,7 +379,7 @@ class ControlThread(threading.Thread):
         elif self._myHardwareControlSystem.FSM.curHandle == "Error":
             status["machineState"] = "error"
             status["activeProgram"]["currentAction"] = "Error"
-            status["log"] = self._myHardwareControlSystem.FSM.fsmData["failure_description"]
+            status["activeProgram"]["errorMessage"] = self._myHardwareControlSystem.FSM.fsmData["failure_description"]
         else:
             program_string = "none"
             try:
@@ -398,7 +398,6 @@ class ControlThread(threading.Thread):
             status["activeProgram"]["estimatedTimeLeft"] = self._myHardwareControlSystem.FSM.curState.estimatedTimeLeftSeconds
             status["activeProgram"]["timeElapsed"] = self._myHardwareControlSystem.FSM.curState.eventDurationWithPause
             status["activeProgram"]["warning"] = self._myHardwareControlSystem.FSM.curState.warning
-
 
         status.update(self._myHardwareControlSystem.valve_status)
         self._statusObject=status
@@ -495,19 +494,19 @@ class ControlThread(threading.Thread):
             if self._myHardwareControlSystem.FSM.curHandle == "Ready":
                 if self._selected_program == 1:
                     self._logger.debug("Extrating")
-                    self.start_extraction()
+                    self.schedule_command_for_execution(Command_StartExtraction(runFull=True))
 
                 elif self._selected_program == 2:
                     self._logger.debug("Decarboxylating")
-                    self.start_decarb()
+                    self.schedule_command_for_execution(Command_StartDecarb())
 
                 elif self._selected_program == 3:
                     self._logger.debug("Heating oil")
-                    self.start_heatoil()
+                    self.schedule_command_for_execution(Command_StartHeatOil())
 
                 elif self._selected_program == 4:
                     self._logger.debug("Distilling")
-                    self.start_distill()
+                    self.schedule_command_for_execution(Command_StartDistill())
 
                 else:
                     self._logger.debug("Invalid program %r, ignoring...", self._selected_program)
@@ -660,7 +659,7 @@ class ControlThread(threading.Thread):
                 # Update the UI
                 self.__update_PhysicalUI()
 
-                # Every 30 seconds update the app.
+                # Every 10 seconds update the app.
                 # Hardware error can also happen here because when creating app payload we're reading
                 # some of the sensors: pressure, temperature, etc.
                 try:
