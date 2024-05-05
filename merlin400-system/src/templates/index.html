@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html>
+    <head>
+      <title>Merlin400</title>  
+      <meta name="viewport" content="width=device-width"/>
+
+      <style>
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+      
+        button,
+        input,
+        textarea,
+        select {
+          font: inherit;
+        }
+
+        div, h4 {
+          margin: 0px;
+          padding: 0px;
+        }
+     
+        #content-wrapper {
+          min-height: 100%;
+          display: grid;
+          grid-template-rows: auto 1fr auto;
+          grid-template-columns: 100%;
+        }
+       
+        html, body {
+          font-family: "Roboto", "Helvetica", "Arial", sans-serif;
+          height: 100%;
+          width:100%;
+          max-width: 1024px;
+          margin-left: auto;
+          margin-right: auto;
+          margin-top: 0px;
+          margin-bottom: 0px;
+          padding: 0px;
+          background-color: #eee;  
+        }
+     
+        .card {
+          padding-left: 4px;
+          padding-right: 4px;
+          padding-top:2px;
+          padding-bottom: 4px;
+          box-shadow: 0px 2px 4px -1px rgba(0,0,0,0.2),0px 4px 5px 0px rgba(0,0,0,0.14),0px 1px 10px 0px rgba(0,0,0,0.12);
+        }
+
+        .gap-8 {
+          gap: 8px;
+        }
+        .flex-column {
+          display: flex;
+          flex-direction: column;
+        }
+        .flex-row {
+          display: flex;
+          flex-direction: row;
+        }
+        .flex-item-fill {
+          flex:auto;
+        }
+      
+        .info-text {
+          font-size: 0.9rem;
+        }
+        .info-text-small {
+          font-size: 0.75rem;
+          letter-spacing: 0.03333em;
+        }
+      
+        #top-bar {
+          color: #fff;
+          background-color: #43a047;
+          height: 85px;
+          display: flex;
+          flex-direction: row;
+          justify-content: space-between;
+        }      
+        #top-bar .top-bar-right {
+          padding-right: 20px;
+        }
+
+        #divMainContent {
+          padding-top: 4px;
+        }
+  
+        #divPrograms {
+          display: flex;
+          flex-direction: column;
+          align-items: start;
+        }
+        #divPrograms button.program.active {
+          background-color: red; 
+        }
+        #divPrograms button.program {
+          text-align: start;
+          width:160px;
+          margin-top: 4px;
+          margin-bottom: 4px;
+          padding-top: 4px;
+          padding-bottom: 2px;
+        }
+
+        #divControlPanel {
+          width: 100%;
+          display: flex;
+          flex-direction: column;
+          justify-content: start;
+          max-width: 550px;
+        }
+
+        #divSelectedProgram {
+          margin-top: 4px;
+        }
+        #divSelectedProgram p {
+          margin-left: 8px;
+        }
+
+        #bottom-bar {
+          height: 56px;
+          display: flex;
+          justify-content: center;
+          background-color: #fff;
+        }
+        #bottom-bar .actionbar-button  {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+        }      
+        #bottom-bar .actionbar-button svg {
+          width: 2.0em;
+          height:2.0em;
+        }
+      </style>   
+
+      <script src="/static/merlin400-programs.js"></script>
+      <script>
+        async function updateStatusFromServer() {
+          try {
+            const response = await fetch('/api/status');
+            if (!response.ok) {
+              throw new Error('Network response was not ok');
+            }
+            const data = await response.json();
+            updateUIWithDataFromServer(data);
+        
+          } catch (error) {
+            console.error(error);
+          }
+        }
+               
+        async function serverApi_reset() {
+          try {
+            const response = await fetch('/api/reset',{
+              method: 'POST',
+              headers: {
+                'Accept': 'application.json',
+                'Content-Type': 'application/json'
+              },
+            });
+        
+            if (!response.ok) {
+              throw new Error('Server response was not ok.\n' + response.json().description);
+            }
+            const data = await response.json();
+            updateUIWithDataFromServer(data);
+        
+          } catch (error) {
+            alert(error);
+          }
+        }
+
+        async function serverApi_pause() {
+          try {
+            const response = await fetch('/api/pause',{
+              method: 'POST',
+              headers: {
+                'Accept': 'application.json',
+                'Content-Type': 'application/json'
+              },
+            });
+        
+            if (!response.ok) {
+              throw new Error('Server response was not ok.\n' + response.json().description);
+            }
+            const data = await response.json();
+            updateUIWithDataFromServer(data);
+        
+          } catch (error) {
+            alert(error);
+          }
+        }
+
+        async function serverApi_startSelectedProgram() {
+          try {
+            const response = await fetch('/api/start/' + AppContext.selectedProgram.id,{
+              method: 'POST',
+              headers: {
+                'Accept': 'application.json',
+                'Content-Type': 'application/json'
+              },
+            });
+        
+            if (!response.ok) {
+              throw new Error('Network response was not ok');
+            }
+            const data = await response.json();
+            updateUIWithDataFromServer(data);
+        
+          } catch (error) {
+            alert(error);
+          }
+        }
+
+        
+        function updateUIWithDataFromServer(data) {          
+          document.querySelector('#divError').innerHTML=data.activeProgram.errorMessage;
+          document.querySelector('#divError').style.visibility=data.activeProgram.errorMessage ? 'visible' : 'collapse';
+          document.querySelector('#tableActiveProgram').style.visibility=data.activeProgram.errorMessage ? 'collapse' : 'visible';
+
+          document.querySelector('#btnStart').disabled=data.machineState!="idle";
+          document.querySelector('#btnPause').disabled=data.machineState!="running";
+          document.querySelector('#btnStop').disabled=data.machineState!="running" && data.machineState!="error" && data.machineState!="pause";
+
+          document.querySelector('#divStatus').innerHTML= data.machineState ? data.machineState[0].toUpperCase() + data.machineState.slice(1) : n/a;  
+
+          updateUI_setDeviceInfo(data.deviceInfo);
+          updateUI_setHardwareStatus(data.hardwareStatus);        
+          updateUI_setActiveProgram(data.activeProgram);        
+        }
+
+        function updateUI_setDeviceInfo(deviceInfo) {
+          const infoText=`ID: ${deviceInfo.machine_id}, FW: ${deviceInfo.firmwareVersion}<br/>Run ${deviceInfo.runMinutesSince} minutes since ${deviceInfo.sinceDate}`;
+          document.querySelector('#divDevice').innerHTML=infoText;  
+        }
+        
+        function updateUI_setHardwareStatus(hardwareStatus) {        
+          document.querySelector('#tdStatus').innerHTML=hardwareStatus.current_status;  
+          document.querySelector('#tdGasTemperature').innerHTML=hardwareStatus.gas_temp.toFixed(1) + ' °C';
+          document.querySelector('#tdPressure').innerHTML=hardwareStatus.pressure.toFixed(1) + ' mbar';
+          document.querySelector('#tdPumpPower').innerHTML=parseInt(hardwareStatus.pump_power) + ' %';
+          document.querySelector('#tdHeaterPower').innerHTML=parseInt(hardwareStatus.bottom_heater_power) + ' %';
+          document.querySelector('#tdHeaterTemperature').innerHTML=hardwareStatus.bottom_heater_temperature.toFixed(1) + ' °C';
+          document.querySelector('#tdFanADCValue').innerHTML=hardwareStatus.fan_adc_value.toFixed(2);
+        }
+
+        function updateUI_setActiveProgram(activeProgram) {       
+          document.querySelector('#tdActiveProgram').innerHTML=activeProgram.programId;
+          document.querySelector('#tdActiveProgram_currentAction').innerHTML=activeProgram.currentAction || '-';
+          document.querySelector('#tdActiveProgram_progress').innerHTML=activeProgram.progress || '-';
+          document.querySelector('#tdActiveProgram_timeElapsed').innerHTML=activeProgram.timeElapsed?.toFixed(2) || '-';
+          document.querySelector('#tdActiveProgram_estimatedTimeLeft').innerHTML=activeProgram.estimatedTimeLeft || '-';
+        }
+
+        function selectProgram(programId) {
+          const programIndex=programId-1;
+
+          AppContext.selectedProgram=AppContext.Programs[programIndex];
+          document.querySelector('#divSelectedProgram').innerHTML=`<h4>${AppContext.selectedProgram.id}. ${AppContext.selectedProgram.name}</h4><p class="info-text-small">${AppContext.selectedProgram.description}</p>`;          
+
+          const programButtons = document.querySelectorAll('#divPrograms button');
+          for(let i=0;i<programButtons.length;i++)
+          {
+            programButtons[i].classList.remove("active");
+            if(i==programIndex) {
+              programButtons[i].classList.add("active");
+              
+            }
+          }
+        }
+      </script>      
+  </head>  
+    <body>  
+      <div id="content-wrapper" class="card">
+        <div id="top-bar" class="card info-text-small">
+          
+          <div class="top-bar-left">
+            <div id="divStatus"></div>
+          </div>
+  
+          <div class="top-bar-right">
+            <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJYAAAArCAMAAACti4F7AAAAAXNSR0IB2cksfwAAAAlwSFlzAAAuIwAALiMBeKU/dgAAAsRQTFRFAAAA////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////JmmGNgAAAOx0Uk5TAAlvybtPAZX//FoRLzEwFCW/licXDezMzQQZ2N4e5r0c8Mfk2T1G9dMCCNqeQUqqbO3xLmP+JlDG3FQzEAv3FSo7PCs4PjUbZGLDhjJpVQwoidT4+dWEIJucmn2ZYAOTlxJ8Osvz8sKA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" 
+                 alt="Drizzle">  
+            <div id="divDevice" ></div>
+          </div>
+        </div>
+  
+        <div id="divMainContent" class="flex-column gap-8">
+
+          <div id="divActiveProgram" class="card info-text">
+            <div class="flex-item-fill">
+              <div id="divError"></div>
+              <table id="tableActiveProgram">
+                <tr><td>Active program:</td><td id="tdActiveProgram"></td></tr>
+                <tr><td>Action:</td><td id="tdActiveProgram_currentAction"></td></tr>
+                <tr><td>Progress:</td><td id="tdActiveProgram_progress"></td></tr>
+                <tr><td>Time elapsed:</td><td id="tdActiveProgram_timeElapsed"></td></tr>
+                <tr><td>Time left (est.):</td><td id="tdActiveProgram_estimatedTimeLeft"></td></tr>
+              </table>
+            </div>
+            <div class="flex-row gap-8" style="justify-content: end;" >
+              <button id="btnPause" onclick="serverApi_pause()" style="width: 80px;" disabled>Pause</button>
+              <button  id="btnStop" onclick="serverApi_reset()" style="width: 80px;" disabled=>Stop</button>
+            </div>
+          </div>
+
+          <div id="divDashboard" class="flex-row gap-8 card">
+            <div id="divPrograms">
+            </div>          
+            
+            <div id="divControlPanel" >
+              <div id="divSelectedProgram" ></div>
+              <div style="text-align: center;" >
+                <button  id="btnStart" onclick="serverApi_startSelectedProgram()" disabled>Start program</button>
+              </div>              
+            </div>  
+          </div>
+          <div id="divHardware" class="card info-text-small">
+            <table >
+              <tr><td>Status:</td><td id="tdStatus"></td></tr>
+              <tr><td>Gas temp.:</td><td id="tdGasTemperature"></td></tr>
+              <tr><td>Pressure:</td><td id="tdPressure"></td></tr>
+              <tr><td>Pump power:</td><td id="tdPumpPower"></td></tr>
+              <tr><td>Heater power:</td><td id="tdHeaterPower"></td></tr>
+              <tr><td>Heater temp.:</td><td id="tdHeaterTemperature"></td></tr>
+              <tr><td>Fan ADC:</td><td id="tdFanADCValue"></td></tr>
+            </table>
+          </div>          
+
+        </div><!--divMainContent-->
+  
+        <div id="bottom-bar" class="gap-8 info-text">
+          <button class="actionbar-button" tabindex="0" type="button">
+            <svg focusable="false" viewBox="0 0 24 24" aria-hidden="true" ><path d="M4 13h6c.55 0 1-.45 1-1V4c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v8c0 .55.45 1 1 1zm0 8h6c.55 0 1-.45 1-1v-4c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v4c0 .55.45 1 1 1zm10 0h6c.55 0 1-.45 1-1v-8c0-.55-.45-1-1-1h-6c-.55 0-1 .45-1 1v8c0 .55.45 1 1 1zM13 4v4c0 .55.45 1 1 1h6c.55 0 1-.45 1-1V4c0-.55-.45-1-1-1h-6c-.55 0-1 .45-1 1z"></path></svg>
+            <span>Dashboard</span>
+          </button>
+  
+          <button class="actionbar-button" tabindex="0" type="button">
+            <svg focusable="false" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 2H4c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM8 20H5c-.55 0-1-.45-1-1v-3h4v4zm0-6H4v-4h4v4zm0-6H4V5c0-.55.45-1 1-1h3v4zm6 12h-4v-4h4v4zm0-6h-4v-4h4v4zm0-6h-4V4h4v4zm5 12h-3v-4h4v3c0 .55-.45 1-1 1zm1-6h-4v-4h4v4zm0-6h-4V4h3c.55 0 1 .45 1 1v3z"></path></svg>
+            <span>Maintenance</span>
+          </button>
+  
+          <button class="actionbar-button" tabindex="0" type="button">
+            <svg focusable="false" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"></path></svg>
+            <span>Settings</span>
+          </button>
+        </div>
+  
+      </div>    
+    </body>
+  </html>
+  
+  <script>
+  (function initUi() {
+    const container = document.querySelector('#divPrograms');
+    for(const prog of AppContext.Programs) {
+      const buttonString = `<button class="program" onclick="selectProgram(${prog.id})">${prog.id}. ${prog.name}</button>`;
+      const buttonFragment = document.createRange().createContextualFragment(buttonString);
+      container.appendChild(buttonFragment);
+    }
+    selectProgram(1);
+  })();
+  
+  (function loop() {
+    updateStatusFromServer();
+    setTimeout(() =>loop(), 5000);
+  })();
+
+  </script>

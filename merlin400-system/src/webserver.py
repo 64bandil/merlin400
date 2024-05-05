@@ -1,6 +1,5 @@
-from flask import Flask, jsonify
-import sys, traceback
-
+from flask import Flask, request, render_template,jsonify      
+import sys, traceback, time
 import controlthread as controlthread
 from hardware.commands.start_extraction import Command_StartExtraction
 from hardware.commands.start_heat_oil import Command_StartHeatOil
@@ -15,41 +14,38 @@ from hardware.commands.clean_valve import Command_CleanValve
 
 app = Flask(__name__)
 
-@app.route("/")
-def home():
+@app.route("/api/status")
+def get_machine_status():
     global control_thread 
     return control_thread.get_machine_json_status()
+
+@app.route('/')
+def home():
+    return render_template('index.html')
 
 @app.route("/logfile.txt")
 def get_log_file():
     return ""
 
-@app.route("/api/startextract", methods = ['POST'])
-def start_extract():
-    #parameters: Full, SoakTime
-    global control_thread 
-    command = Command_StartExtraction(True)
+@app.route("/api/start/<int:programId>", methods = ['POST'])
+def start(programId: int):
+    if programId==1:
+        #parameters: Full, SoakTime
+        command = Command_StartExtraction(runFull=True)
+    elif programId==2:
+        command = Command_StartDecarb()
+    elif programId==3:
+        command = Command_StartHeatOil()
+    elif programId==4:
+        command = Command_StartDistill()
+    elif programId==5:
+        command = Command_StartExtraction(runFull=False)
+    elif programId==6:
+        command = Command_StartVentPump()
+    else:
+        return jsonify({"type": "","description": "Invalid programId: " + programId }), 409
+
     return process_command(command)
-
-@app.route("/api/startheatoil", methods = ['POST'])
-def start_heat_oil():
-    return process_command(Command_StartHeatOil())
-
-@app.route("/api/startcleanpump", methods = ['POST'])
-def start_clean_pump():
-    return process_command(Command_StartCleanPump())
-
-@app.route("/api/startdecarb", methods = ['POST'])
-def start_decarb():
-    return process_command(Command_StartDecarb())
-
-@app.route("/api/startdistill", methods = ['POST'])
-def start_distill():
-    return process_command(Command_StartDistill())
-
-@app.route("/api/startventpump", methods = ['POST'])
-def start_vent_pump():
-    return process_command(Command_StartVentPump())
 
 @app.route("/api/pause", methods = ['POST'])
 def pause():
@@ -63,14 +59,23 @@ def resume():
 def reset():
     return process_command(Command_Reset())
 
+
+@app.route("/api/startcleanpump", methods = ['POST'])
+def start_clean_pump():
+    return process_command(Command_StartCleanPump())
+
 @app.route("/api/cleanvalve/<int:valvenumber>", methods = ['POST'])
 def clean_valve(valvenumber: int):
     return process_command(Command_CleanValve(valvenumber))
+
 
 def process_command(command):
     global control_thread 
     try:
         control_thread.schedule_command_for_execution(command)
+        #Give the controlthread/FSM time to execute command and update status
+        time.sleep(.04)
+        return control_thread.get_machine_json_status()
     except Exception as error:
         exc_info = sys.exc_info()
         sExceptionInfo = ''.join(traceback.format_exception(*exc_info))
@@ -84,9 +89,9 @@ def process_command(command):
             }
         )
         return responseJson, 409
-    return '',204
 
 def start_server(controlThread:controlthread.ControlThread ):
     global control_thread
     control_thread=controlThread
+    app.config['TEMPLATES_AUTO_RELOAD'] = True
     app.run(debug=False, host="0.0.0.0", port=int("8080"))
