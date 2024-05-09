@@ -14,7 +14,10 @@ from hardware.commands.clean_valve import Command_CleanValve
 import threading
 from werkzeug.serving import make_server
 
-app = Flask(__name__)
+app = Flask(__name__, 
+            static_url_path='',  
+            static_folder='../wwwroot', 
+            template_folder='../wwwroot')
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 
 @app.route("/api/status")
