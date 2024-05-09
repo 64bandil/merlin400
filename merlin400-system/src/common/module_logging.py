@@ -4,20 +4,15 @@ import functools
 import logging
 import os
 from logging.handlers import MemoryHandler, RotatingFileHandler
-
 from common.settings import LOGS_DIRECTORY, BATCH_LOGGING
 
-
-APP_LOGGER_NAME = "drizzle"
-
+APP_LOGGER_NAME = "drizzle-merlin400"
 
 def get_app_logger(name):
     return logging.getLogger(APP_LOGGER_NAME + "." + name)
 
-
 def get_root_logger():
     return logging.getLogger(APP_LOGGER_NAME)
-
 
 def with_logging_enabled(method):
     """Decorator that enables logging for a decorated class method."""
@@ -38,7 +33,6 @@ def with_logging_enabled(method):
 
     return _impl
 
-
 def flush_logger():
     """Manually flush memory handler."""
     root_logger = get_root_logger()
@@ -46,7 +40,6 @@ def flush_logger():
         if isinstance(handler, MemoryHandler):
             handler.flush()
             break
-
 
 def setup_logging():
     logs_dir = LOGS_DIRECTORY
