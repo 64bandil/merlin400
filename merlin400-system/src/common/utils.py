@@ -3,6 +3,7 @@ import os
 import shutil
 import threading
 import queue
+import subprocess
 
 class UpdateError(Exception):
     """Raise when there is a problem with update process."""
@@ -27,6 +28,9 @@ def retry(times, exceptions=(Exception,)):
 def is_root():
     return os.geteuid() == 0
 
+def reboot():
+    print("Rebooting system...")
+    subprocess.run(["reboot"], shell=True, check=True)
 
 def compress_file(input_file_path, output_file_path):
     with open(input_file_path, "rb") as ifp:

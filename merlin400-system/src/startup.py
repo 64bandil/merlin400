@@ -2,76 +2,107 @@ import atexit
 import signal
 import threading
 import time
+import sys
 
 from common import utils
 from common.module_logging import setup_logging, get_app_logger
+from common.settings import HEARTBEAT_TIMEOUT_SECONDS
 import system_setup
-
 from controlthread import ControlThread
 import webserver
-
 
 class Startup:
     """
     Application starts here
     """
+    _controlThread: ControlThread = None
+    _webServerThread: webserver.ServerThread = None
+    _isRunning = True
+
     def main(self):
         setup_logging()
 
         self._logger = get_app_logger(str(self.__class__))
-        self._logger .info("Starting drizzle control v1.1")
+        self._logger.info("Starting Drizzle Merlin400 control...")
 
         #check for sd card move
         system_setup.update_sd_card_data()
 
-        # check for sudo access
         if not utils.is_root():
             print("Error, run application as sudo")
             exit(1)
 
-        self._heartbeet = threading.Event()
-        self._last_heartbeet = time.time()
-        atexit.register(self.shutdown)
+        #Register our handler for shutdown signals (CTRL+C, kill, etc.)
         for signal_name in (
             signal.SIGHUP,
+            signal.SIGINT,
             signal.SIGABRT,
-            signal.SIGHUP,
             signal.SIGTERM,
             signal.SIGSEGV,
         ):
             signal.signal(signal_name, self.shutdown_handler)
 
-        self._logger.debug("Initializing ControlThread object")
-        self.myControlObject = ControlThread("ControlThread", self._heartbeet, daemon=True)
+        self._heartbeet = threading.Event()
+        self._last_heartbeet = time.time()
+
+        #Start control and webserver threads as Daemons (background threads that will exit when main thread exits)
+        self._logger.debug("Initializing ControlThread")
+        self._controlThread = ControlThread("ControlThread", self._heartbeet, daemon=True)
         self._logger.debug("Starting ControlThread")
-        self.myControlObject.start()
-        self._logger.debug("ControlThread started")
+        self._controlThread.start()
 
-        self._logger.debug("Intializing and starting WebServer")
-        webserver.start_server(self.myControlObject)
+        self._logger.debug("Intializing WebServerThread")
+        self._webServerThread = webserver.ServerThread(self._controlThread, daemon=True)
+        self._logger.debug("Starting WebServerThread")
+        self._webServerThread.start()
+       
+        self._logger.debug("Starting application main loop")
+        while self._isRunning:
+            try:            
+                # Check if child thread is still running.
+                # Additional heartbeat check to make sure controlThread is running.
+                _seconds_since_last_heartbeat = time.time() - self._last_heartbeet
+                if not self._heartbeet.is_set():
+                    self._logger.warning("Heartbeat not set... Time passed: {:.02f}".format(_seconds_since_last_heartbeat))
+                else:
+                    self._last_heartbeet = time.time()
+                    _seconds_since_last_heartbeat = time.time() - self._last_heartbeet
 
+                if (_seconds_since_last_heartbeat > HEARTBEAT_TIMEOUT_SECONDS and not self._heartbeet.is_set()) or not self._controlThread.is_alive():
+                    self._logger.error("ControlThread is dead. Exiting application.")
+                    self.shutdown_handler()
+                    #self._logger.error("ControlThread is dead. Restarting device...")
+                    #utils.reboot()
 
-    def shutdown(self):
-        self._logger.debug("Control Thread - executing shutdown sequence...")
-        self._logger.debug("Closing server...")
+                if self._controlThread._running:
+                    self._heartbeet.clear()
 
-        self._logger.debug("Server closed")
+                if self._isRunning:
+                    time.sleep(0.5)
 
+            except Exception as error:
+                self._logger.exception("Unexpected exception in application main loop: {!r}".format(error))
+        
     def shutdown_handler(self, *args):
         self._logger.debug("Handling shutdown signal...")
-        self._logger.debug("Control Thread - handling shutdown signal...")
-        if hasattr(self, "myControlObject"):
-            # try:
-            #     # TODO: replace this.
-            #     #self.myControlObject.iot_client.disconnect()
-            # except Exception:
-            #     # Ignore disconnect error as we're shutting down anyway.
-            #     pass
-            self.myControlObject.stop()
-            self.myControlObject.join()
-        self.shutdown()
-        self._logger.debug("Control Thread - handling shutdown signal - exiting app.")
-        exit(0)
+        self._isRunning=False
+
+        if(self._controlThread!=None):
+            self._logger.debug("Stopping ControlThread - Calling stop()")
+            self._controlThread.stop()
+            self._logger.debug("Stopping ControlThread - Calling join()")
+            self._controlThread.join()
+            self._controlThread=None
+            self._logger.debug("ControlThread is stopped.")
+
+        if(self._webServerThread!=None):
+            self._logger.debug("Stopping WebServerThread.")
+            self._webServerThread.stop()
+            self._webServerThread.join()
+            self._webServerThread=None
+            self._logger.debug("WebServerThread is stopped.")
+
+        sys.exit(0)
 
 if __name__ == "__main__":
     program = Startup()

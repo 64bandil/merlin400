@@ -11,8 +11,11 @@ from hardware.commands.pause_program import Command_PauseProgram
 from hardware.commands.resume_program import Command_ResumeProgram
 from hardware.commands.reset import Command_Reset
 from hardware.commands.clean_valve import Command_CleanValve
+import threading
+from werkzeug.serving import make_server
 
 app = Flask(__name__)
+app.config['TEMPLATES_AUTO_RELOAD'] = True
 
 @app.route("/api/status")
 def get_machine_status():
@@ -90,8 +93,21 @@ def process_command(command):
         )
         return responseJson, 409
 
-def start_server(controlThread:controlthread.ControlThread ):
-    global control_thread
-    control_thread=controlThread
-    app.config['TEMPLATES_AUTO_RELOAD'] = True
-    app.run(debug=False, host="0.0.0.0", port=int("8080"))
+
+class ServerThread(threading.Thread):   
+    def __init__(self,  controlThread:controlthread.ControlThread, **kwargs):
+        super().__init__(**kwargs)
+
+        global control_thread
+        control_thread=controlThread
+
+        self._server = make_server('0.0.0.0', 80, app)
+        self._ctx = app.app_context()
+        self._ctx.push()
+
+    def run(self):
+        self._server.serve_forever()
+
+    def stop(self):
+        self._server.shutdown()
+
