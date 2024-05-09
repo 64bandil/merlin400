@@ -1,5 +1,31 @@
 var AppContext = AppContext || {};
 
+AppContext.ApiClient = {
+  async getJson(url) {
+    const response = await fetch(url);
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.description);
+    }
+    return data;
+  },
+
+  async postJson(url) {
+    const response = await fetch(url,{
+      method: 'POST',
+      headers: {
+        'Accept': 'application.json',
+        'Content-Type': 'application/json'
+      },
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.description);
+    }
+    return data;
+  }  
+};
+
 AppContext.Programs = [
     {
       id: 1,
@@ -10,22 +36,10 @@ AppContext.Programs = [
       color: "var(--drizzle-red)",
       soakTimeDefault: 30,
       statusLabels: [
-        {
-          minValue: 0.2,
-          label: "Initializing",
-        },
-        {
-          minValue: 0.4,
-          label: "Extracting",
-        },
-        {
-          minValue: 0.6,
-          label: "Distilling",
-        },
-        {
-          minValue: 0.8,
-          label: "Finishing",
-        },
+        { minValue: 0.2, label: "Initializing", },
+        { minValue: 0.4, label: "Extracting", },
+        { minValue: 0.6, label: "Distilling", },
+        { minValue: 0.8, label: "Finishing",  },
       ],
     },
     {
@@ -36,14 +50,8 @@ AppContext.Programs = [
       icon: "build",
       color: "var(--drizzle-blue)",
       statusLabels: [
-        {
-          minValue: 0.0,
-          label: "Starting",
-        },
-        {
-          minValue: 0.1,
-          label: "Decarboxylating",
-        },
+        { minValue: 0.0, label: "Starting", },
+        { minValue: 0.1, label: "Decarboxylating", },
       ],
     },
     {

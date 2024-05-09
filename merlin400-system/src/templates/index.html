@@ -3,174 +3,14 @@
     <head>
       <title>Merlin400</title>  
       <meta name="viewport" content="width=device-width"/>
+      <link rel="stylesheet" type="text/css" href="/static/drizzle-styles.css">
+      <script src="/static/merlin400-api.js"></script>
 
-      <style>
-        *,
-        *::before,
-        *::after {
-          box-sizing: border-box;
-        }
-      
-        button,
-        input,
-        textarea,
-        select {
-          font: inherit;
-        }
-
-        div, h4 {
-          margin: 0px;
-          padding: 0px;
-        }
-     
-        #content-wrapper {
-          min-height: 100%;
-          display: grid;
-          grid-template-rows: auto 1fr auto;
-          grid-template-columns: 100%;
-        }
-       
-        html, body {
-          font-family: "Roboto", "Helvetica", "Arial", sans-serif;
-          height: 100%;
-          width:100%;
-          max-width: 1024px;
-          margin-left: auto;
-          margin-right: auto;
-          margin-top: 0px;
-          margin-bottom: 0px;
-          padding: 0px;
-          background-color: #eee;  
-        }
-     
-        .card {
-          padding-left: 4px;
-          padding-right: 4px;
-          padding-top:2px;
-          padding-bottom: 4px;
-          box-shadow: 0px 2px 4px -1px rgba(0,0,0,0.2),0px 4px 5px 0px rgba(0,0,0,0.14),0px 1px 10px 0px rgba(0,0,0,0.12);
-        }
-
-        .gap-8 {
-          gap: 8px;
-        }
-        .flex-column {
-          display: flex;
-          flex-direction: column;
-        }
-        .flex-row {
-          display: flex;
-          flex-direction: row;
-        }
-        .flex-item-fill {
-          flex:auto;
-        }
-      
-        .info-text {
-          font-size: 0.9rem;
-        }
-        .info-text-small {
-          font-size: 0.75rem;
-          letter-spacing: 0.03333em;
-        }
-      
-        #top-bar {
-          color: #fff;
-          background-color: #43a047;
-          height: 85px;
-          display: flex;
-          flex-direction: row;
-          justify-content: space-between;
-        }      
-        #top-bar .top-bar-right {
-          padding-right: 20px;
-        }
-
-        #divMainContent {
-          padding-top: 4px;
-        }
-  
-        #divPrograms {
-          display: flex;
-          flex-direction: column;
-          align-items: start;
-        }
-        #divPrograms button.program.active {
-          background-color: red; 
-        }
-        #divPrograms button.program {
-          text-align: start;
-          width:160px;
-          margin-top: 4px;
-          margin-bottom: 4px;
-          padding-top: 4px;
-          padding-bottom: 2px;
-        }
-
-        #divControlPanel {
-          width: 100%;
-          display: flex;
-          flex-direction: column;
-          justify-content: start;
-          max-width: 550px;
-        }
-
-        #divSelectedProgram {
-          margin-top: 4px;
-        }
-        #divSelectedProgram p {
-          margin-left: 8px;
-        }
-
-        #bottom-bar {
-          height: 56px;
-          display: flex;
-          justify-content: center;
-          background-color: #fff;
-        }
-        #bottom-bar .actionbar-button  {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-        }      
-        #bottom-bar .actionbar-button svg {
-          width: 2.0em;
-          height:2.0em;
-        }
-      </style>   
-
-      <script src="/static/merlin400-programs.js"></script>
-      <script>
-        async function updateStatusFromServer() {
-          try {
-            const response = await fetch('/api/status');
-            if (!response.ok) {
-              throw new Error('Network response was not ok');
-            }
-            const data = await response.json();
-            updateUIWithDataFromServer(data);
-        
-          } catch (error) {
-            console.error(error);
-          }
-        }
-               
+      <script>              
         async function serverApi_reset() {
           try {
-            const response = await fetch('/api/reset',{
-              method: 'POST',
-              headers: {
-                'Accept': 'application.json',
-                'Content-Type': 'application/json'
-              },
-            });
-        
-            if (!response.ok) {
-              throw new Error('Server response was not ok.\n' + response.json().description);
-            }
-            const data = await response.json();
-            updateUIWithDataFromServer(data);
-        
+            const statusData = await AppContext.ApiClient.postJson('/api/reset');        
+            updateUIWithDataFromServer(statusData);
           } catch (error) {
             alert(error);
           }
@@ -178,20 +18,8 @@
 
         async function serverApi_pause() {
           try {
-            const response = await fetch('/api/pause',{
-              method: 'POST',
-              headers: {
-                'Accept': 'application.json',
-                'Content-Type': 'application/json'
-              },
-            });
-        
-            if (!response.ok) {
-              throw new Error('Server response was not ok.\n' + response.json().description);
-            }
-            const data = await response.json();
-            updateUIWithDataFromServer(data);
-        
+            const statusData = await AppContext.ApiClient.postJson('/api/pause');        
+            updateUIWithDataFromServer(statusData);
           } catch (error) {
             alert(error);
           }
@@ -199,25 +27,12 @@
 
         async function serverApi_startSelectedProgram() {
           try {
-            const response = await fetch('/api/start/' + AppContext.selectedProgram.id,{
-              method: 'POST',
-              headers: {
-                'Accept': 'application.json',
-                'Content-Type': 'application/json'
-              },
-            });
-        
-            if (!response.ok) {
-              throw new Error('Network response was not ok');
-            }
-            const data = await response.json();
-            updateUIWithDataFromServer(data);
-        
+            const statusData = await AppContext.ApiClient.postJson('/api/start/' + AppContext.selectedProgram.id);        
+            updateUIWithDataFromServer(statusData);
           } catch (error) {
             alert(error);
-          }
+          }       
         }
-
         
         function updateUIWithDataFromServer(data) {          
           document.querySelector('#divError').innerHTML=data.activeProgram.errorMessage;
@@ -228,10 +43,12 @@
           document.querySelector('#btnPause').disabled=data.machineState!="running";
           document.querySelector('#btnStop').disabled=data.machineState!="running" && data.machineState!="error" && data.machineState!="pause";
 
-          document.querySelector('#divStatus').innerHTML= data.machineState ? data.machineState[0].toUpperCase() + data.machineState.slice(1) : n/a;  
+          document.querySelector('#divStatus').innerHTML= 
+            (data.machineState ? data.machineState[0].toUpperCase() + data.machineState.slice(1) : n/a) + "<br/>" +
+            data.currentStatus + "<br/>" + data.timestamp;
 
           updateUI_setDeviceInfo(data.deviceInfo);
-          updateUI_setHardwareStatus(data.hardwareStatus);        
+          updateUI_setHardwareStatus(data.hardwareMonitor);        
           updateUI_setActiveProgram(data.activeProgram);        
         }
 
@@ -241,13 +58,16 @@
         }
         
         function updateUI_setHardwareStatus(hardwareStatus) {        
-          document.querySelector('#tdStatus').innerHTML=hardwareStatus.current_status;  
-          document.querySelector('#tdGasTemperature').innerHTML=hardwareStatus.gas_temp.toFixed(1) + ' °C';
-          document.querySelector('#tdPressure').innerHTML=hardwareStatus.pressure.toFixed(1) + ' mbar';
+          document.querySelector('#tdGasTemperature').innerHTML=hardwareStatus.gas_temp?.toFixed(1) + ' °C';
+          document.querySelector('#tdPressure').innerHTML=hardwareStatus.pressure?.toFixed(1) + ' mbar';
           document.querySelector('#tdPumpPower').innerHTML=parseInt(hardwareStatus.pump_power) + ' %';
           document.querySelector('#tdHeaterPower').innerHTML=parseInt(hardwareStatus.bottom_heater_power) + ' %';
-          document.querySelector('#tdHeaterTemperature').innerHTML=hardwareStatus.bottom_heater_temperature.toFixed(1) + ' °C';
-          document.querySelector('#tdFanADCValue').innerHTML=hardwareStatus.fan_adc_value.toFixed(2);
+          document.querySelector('#tdHeaterTemperature').innerHTML=hardwareStatus.bottom_heater_temperature?.toFixed(1) + ' °C';
+          document.querySelector('#tdFanADCValue').innerHTML=hardwareStatus.fan_adc_value?.toFixed(2);
+          document.querySelector('#tdValve1').innerHTML=(hardwareStatus.valve1==0 ? 'Open' : 'Closed') + ' (' + hardwareStatus.valve1 + ')';
+          document.querySelector('#tdValve2').innerHTML=(hardwareStatus.valve2==0 ? 'Open' : 'Closed') + ' (' + hardwareStatus.valve2 + ')';
+          document.querySelector('#tdValve3').innerHTML=(hardwareStatus.valve3==0 ? 'Open' : 'Closed') + ' (' + hardwareStatus.valve3 + ')';
+          document.querySelector('#tdValve4').innerHTML=(hardwareStatus.valve4==0 ? 'Open' : 'Closed') + ' (' + hardwareStatus.valve4 + ')';
         }
 
         function updateUI_setActiveProgram(activeProgram) {       
@@ -260,17 +80,18 @@
 
         function selectProgram(programId) {
           const programIndex=programId-1;
-
           AppContext.selectedProgram=AppContext.Programs[programIndex];
-          document.querySelector('#divSelectedProgram').innerHTML=`<h4>${AppContext.selectedProgram.id}. ${AppContext.selectedProgram.name}</h4><p class="info-text-small">${AppContext.selectedProgram.description}</p>`;          
+
+          document.querySelector('#divSelectedProgram').innerHTML=
+            `<h4>${AppContext.selectedProgram.id}. ${AppContext.selectedProgram.name}</h4>
+             <p class="info-text-small">${AppContext.selectedProgram.description}</p>`;          
 
           const programButtons = document.querySelectorAll('#divPrograms button');
           for(let i=0;i<programButtons.length;i++)
           {
             programButtons[i].classList.remove("active");
             if(i==programIndex) {
-              programButtons[i].classList.add("active");
-              
+              programButtons[i].classList.add("active");              
             }
           }
         }
@@ -302,6 +123,7 @@
                 <tr><td>Progress:</td><td id="tdActiveProgram_progress"></td></tr>
                 <tr><td>Time elapsed:</td><td id="tdActiveProgram_timeElapsed"></td></tr>
                 <tr><td>Time left (est.):</td><td id="tdActiveProgram_estimatedTimeLeft"></td></tr>
+                <tr><td>Warning:</td><td id="tdActiveProgram_warning"></td></tr>
               </table>
             </div>
             <div class="flex-row gap-8" style="justify-content: end;" >
@@ -321,15 +143,22 @@
               </div>              
             </div>  
           </div>
-          <div id="divHardware" class="card info-text-small">
+          <div id="divHardware" class="card info-text-small flex-row">
             <table >
-              <tr><td>Status:</td><td id="tdStatus"></td></tr>
               <tr><td>Gas temp.:</td><td id="tdGasTemperature"></td></tr>
               <tr><td>Pressure:</td><td id="tdPressure"></td></tr>
               <tr><td>Pump power:</td><td id="tdPumpPower"></td></tr>
               <tr><td>Heater power:</td><td id="tdHeaterPower"></td></tr>
               <tr><td>Heater temp.:</td><td id="tdHeaterTemperature"></td></tr>
               <tr><td>Fan ADC:</td><td id="tdFanADCValue"></td></tr>
+            </table>
+            <table style="margin-left:auto" >
+              <tr><td>&nbsp;</td><td></td></tr>
+              <tr><td>&nbsp;</td><td></td></tr>
+              <tr><td>Valve 1:</td><td id="tdValve1"></td></tr>
+              <tr><td>Valve 2:</td><td id="tdValve2"></td></tr>
+              <tr><td>Valve 3:</td><td id="tdValve3"></td></tr>
+              <tr><td>Valve 4:</td><td id="tdValve4"></td></tr>
             </table>
           </div>          
 
@@ -341,12 +170,12 @@
             <span>Dashboard</span>
           </button>
   
-          <button class="actionbar-button" tabindex="0" type="button">
+          <button disabled class="actionbar-button" tabindex="0" type="button">
             <svg focusable="false" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 2H4c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM8 20H5c-.55 0-1-.45-1-1v-3h4v4zm0-6H4v-4h4v4zm0-6H4V5c0-.55.45-1 1-1h3v4zm6 12h-4v-4h4v4zm0-6h-4v-4h4v4zm0-6h-4V4h4v4zm5 12h-3v-4h4v3c0 .55-.45 1-1 1zm1-6h-4v-4h4v4zm0-6h-4V4h3c.55 0 1 .45 1 1v3z"></path></svg>
             <span>Maintenance</span>
           </button>
   
-          <button class="actionbar-button" tabindex="0" type="button">
+          <button disabled class="actionbar-button" tabindex="0" type="button">
             <svg focusable="false" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"></path></svg>
             <span>Settings</span>
           </button>
@@ -367,8 +196,13 @@
     selectProgram(1);
   })();
   
-  (function loop() {
-    updateStatusFromServer();
+  (async function loop() {
+    try {
+      const statusData = await AppContext.ApiClient.getJson('/api/status');
+      updateUIWithDataFromServer(statusData);        
+    } catch (error) {
+      alert(error);
+    }
     setTimeout(() =>loop(), 5000);
   })();
 

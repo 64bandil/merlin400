@@ -1,0 +1,135 @@
+*,
+*::before, *::after {
+  box-sizing: border-box;
+}
+
+button, input, textarea, select {
+  font: inherit;
+}
+
+div, h4 {
+  margin: 0px;
+  padding: 0px;
+}
+   
+html, body {
+  font-family: "Roboto", "Helvetica", "Arial", sans-serif;
+  height: 100%;
+  width:100%;
+  max-width: 1024px;
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 0px;
+  margin-bottom: 0px;
+  padding: 0px;
+  background-color: #eee;  
+}
+
+.card {
+  padding-left: 4px;
+  padding-right: 4px;
+  padding-top:2px;
+  padding-bottom: 4px;
+  box-shadow: 0px 2px 4px -1px rgba(0,0,0,0.2),0px 4px 5px 0px rgba(0,0,0,0.14),0px 1px 10px 0px rgba(0,0,0,0.12);
+}
+
+.gap-8 {
+  gap: 8px;
+}
+
+.flex-column {
+  display: flex;
+  flex-direction: column;
+}
+.flex-row {
+  display: flex;
+  flex-direction: row;
+}
+.flex-item-fill {
+  flex:auto;
+}
+
+.info-text {
+  font-size: 0.9rem;
+}
+.info-text-small {
+  font-size: 0.75rem;
+  letter-spacing: 0.03333em;
+}
+
+#content-wrapper {
+  min-height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  grid-template-columns: 100%;
+}
+
+#top-bar {
+  color: #fff;
+  background-color: #43a047;
+  height: 85px;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+}      
+#top-bar .top-bar-right {
+  padding-right: 20px;
+}
+
+#divMainContent {
+  padding-top: 4px;
+}
+
+#divPrograms {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+}
+#divPrograms button.program.active {
+  background-color: red; 
+}
+#divPrograms button.program {
+  text-align: start;
+  width:160px;
+  margin-top: 4px;
+  margin-bottom: 4px;
+  padding-top: 4px;
+  padding-bottom: 2px;
+}
+
+#divControlPanel {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: start;
+  max-width: 550px;
+}
+
+#divSelectedProgram {
+  margin-top: 4px;
+}
+#divSelectedProgram p {
+  margin-left: 8px;
+}
+
+#divHardware {
+  margin-top: auto;
+  margin-bottom: 4px;
+}
+
+#bottom-bar {
+  height: 56px;
+  display: flex;
+  justify-content: center;
+  background-color: #fff;
+}
+#bottom-bar .actionbar-button  {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 90px;
+}      
+#bottom-bar .actionbar-button svg {
+  width: 2.0em;
+  height:2.0em;
+}
