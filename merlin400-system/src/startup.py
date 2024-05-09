@@ -1,27 +1,24 @@
-import atexit
 import signal
 import threading
 import time
 import sys
-
 from common import utils
 from common.module_logging import setup_logging, get_app_logger
 from common.settings import HEARTBEAT_TIMEOUT_SECONDS
 import system_setup
 from controlthread import ControlThread
-import webserver
+from webserver import ServerThread
 
 class Startup:
     """
     Application starts here
     """
     _controlThread: ControlThread = None
-    _webServerThread: webserver.ServerThread = None
+    _webServerThread: ServerThread = None
     _isRunning = True
 
     def main(self):
         setup_logging()
-
         self._logger = get_app_logger(str(self.__class__))
         self._logger.info("Starting Drizzle Merlin400 control...")
 
@@ -42,17 +39,17 @@ class Startup:
         ):
             signal.signal(signal_name, self.shutdown_handler)
 
-        self._heartbeet = threading.Event()
-        self._last_heartbeet = time.time()
+        self._heartbeat = threading.Event()
+        self._last_heartbeat = time.time()
 
         #Start control and webserver threads as Daemons (background threads that will exit when main thread exits)
         self._logger.debug("Initializing ControlThread")
-        self._controlThread = ControlThread("ControlThread", self._heartbeet, daemon=True)
+        self._controlThread = ControlThread("ControlThread", self._heartbeat, daemon=True)
         self._logger.debug("Starting ControlThread")
         self._controlThread.start()
 
         self._logger.debug("Intializing WebServerThread")
-        self._webServerThread = webserver.ServerThread(self._controlThread, daemon=True)
+        self._webServerThread = ServerThread(self._controlThread, daemon=True)
         self._logger.debug("Starting WebServerThread")
         self._webServerThread.start()
        
@@ -61,21 +58,21 @@ class Startup:
             try:            
                 # Check if child thread is still running.
                 # Additional heartbeat check to make sure controlThread is running.
-                _seconds_since_last_heartbeat = time.time() - self._last_heartbeet
-                if not self._heartbeet.is_set():
+                _seconds_since_last_heartbeat = time.time() - self._last_heartbeat
+                if not self._heartbeat.is_set():
                     self._logger.warning("Heartbeat not set... Time passed: {:.02f}".format(_seconds_since_last_heartbeat))
                 else:
-                    self._last_heartbeet = time.time()
-                    _seconds_since_last_heartbeat = time.time() - self._last_heartbeet
+                    self._last_heartbeat = time.time()
+                    _seconds_since_last_heartbeat = time.time() - self._last_heartbeat
 
-                if (_seconds_since_last_heartbeat > HEARTBEAT_TIMEOUT_SECONDS and not self._heartbeet.is_set()) or not self._controlThread.is_alive():
+                if (_seconds_since_last_heartbeat > HEARTBEAT_TIMEOUT_SECONDS and not self._heartbeat.is_set()) or not self._controlThread.is_alive():
                     self._logger.error("ControlThread is dead. Exiting application.")
                     self.shutdown_handler()
                     #self._logger.error("ControlThread is dead. Restarting device...")
                     #utils.reboot()
 
                 if self._controlThread._running:
-                    self._heartbeet.clear()
+                    self._heartbeat.clear()
 
                 if self._isRunning:
                     time.sleep(0.5)
@@ -96,8 +93,9 @@ class Startup:
             self._logger.debug("ControlThread is stopped.")
 
         if(self._webServerThread!=None):
-            self._logger.debug("Stopping WebServerThread.")
+            self._logger.debug("Stopping WebServerThread - Calling stop()")
             self._webServerThread.stop()
+            self._logger.debug("Stopping WebServerThread - Calling join()")
             self._webServerThread.join()
             self._webServerThread=None
             self._logger.debug("WebServerThread is stopped.")

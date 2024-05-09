@@ -56,7 +56,7 @@ class ControlThread(threading.Thread):
     """
     _scheduledCommand: BaseCommand = None
     _activeCommand: BaseCommand = None
-    _statusObject: any = {
+    _statusDict: any = {
         "machineState": "idle",
         "currentStatus": None,
         "timestamp": int(time.time()),
@@ -104,59 +104,57 @@ class ControlThread(threading.Thread):
         },
     }
 
-    def __init__(self, name, heartbeet, **kwargs):
+    def __init__(self, name, heartbeat, **kwargs):
         """
         Constructor method
         """
-        self._heartbeet = heartbeet
-        self._heartbeet.set()
+        self._heartbeat = heartbeat
+        self._heartbeat.set()
 
         # Initialize thread
         super().__init__(**kwargs)
-
-        self._logger = get_app_logger(str(self.__class__))
-
-        # Read fw version
-        self.version = open("VERSION").readlines()[0].strip()
-
         # Store thread name
         self.name = name
 
+        self._logger = get_app_logger(str(self.__class__))
+
+        # Read fw version and device version
+        self.version = open("VERSION").readlines()[0].strip()
         self.device_version = system_setup.get_device_version()
 
         # Initialize hardware here
         self._logger.info("Initializing control system. Firmware version: {}".format(self.version))
         try:
-            self._myHardwareControlSystem = module_HardwareControlSystem(self.device_version)
-            if self._myHardwareControlSystem.init_status == INIT_STATUS_PRESSURE_SENSOR_ERROR:
+            self._hardwareControlSystem = module_HardwareControlSystem(self.device_version)
+            if self._hardwareControlSystem.init_status == INIT_STATUS_PRESSURE_SENSOR_ERROR:
                 raise PressureSensorFailure("Pressure sensor initialization problem")
-            elif self._myHardwareControlSystem.init_status == INIT_STATUS_USER_PANEL_ERROR:
+            elif self._hardwareControlSystem.init_status == INIT_STATUS_USER_PANEL_ERROR:
                 raise UserPanelError("Failed to initialize user panel")
-            elif self._myHardwareControlSystem.init_status != INIT_STATUS_OK:
+            elif self._hardwareControlSystem.init_status != INIT_STATUS_OK:
                 raise ElectricalError("I2C related error.")
 
         except PressureSensorFailure:
             self._logger.error("Pressure sensor initialization error. Entering error state...")
-            self._myHardwareControlSystem.FSM.fsmData["failure_mode"] = FailureMode.PRESSURE_SENSOR_ERROR
-            self._myHardwareControlSystem.FSM.ToTransistion("toStateError")
+            self._hardwareControlSystem.FSM.fsmData["failure_mode"] = FailureMode.PRESSURE_SENSOR_ERROR
+            self._hardwareControlSystem.FSM.ToTransistion("toStateError")
 
         except ElectricalError:
             self._logger.error("Electrical error. Entering error state...")
-            self._myHardwareControlSystem.do_fast_blink()
-            self._myHardwareControlSystem.FSM.ToTransistion("toStateError")
+            self._hardwareControlSystem.do_fast_blink()
+            self._hardwareControlSystem.FSM.ToTransistion("toStateError")
 
         except UserPanelError:
             self._logger.error("User panel error. Entering error state...")
-            self._myHardwareControlSystem.do_slow_blink()
-            self._myHardwareControlSystem.FSM.ToTransistion("toStateError")
+            self._hardwareControlSystem.do_slow_blink()
+            self._hardwareControlSystem.FSM.ToTransistion("toStateError")
 
         except HardwareFailure:
             self._logger.error("Hardware error. Entering error state...")
-            self._myHardwareControlSystem.do_fast_blink()
-            self._myHardwareControlSystem.FSM.ToTransistion("toStateError")
+            self._hardwareControlSystem.do_fast_blink()
+            self._hardwareControlSystem.FSM.ToTransistion("toStateError")
 
         else:
-            self._myHardwareControlSystem.FSM.SetFSMData("start_flag", False)
+            self._hardwareControlSystem.FSM.SetFSMData("start_flag", False)
             self._logger.info("Control system initialized")
 
         self._selected_program = 1
@@ -180,16 +178,16 @@ class ControlThread(threading.Thread):
         self._since_date = None
 
         # stats db connection.
-        self.__init_stats_db()
-        self.__load_total_run_minutes()
+        self._init_stats_db()
+        self._load_total_run_minutes()
 
         #Only set at init (never changes)
-        self._statusObject["deviceInfo"]["machine_id"] = system_setup.getserial()
-        self._statusObject["deviceInfo"]["unique_id"] = system_setup.get_unique_id()
-        self._statusObject["deviceInfo"]["firmwareVersion"] = self.version
-        self._statusObject["deviceInfo"]["sinceDate"] = self._since_date
+        self._statusDict["deviceInfo"]["machine_id"] = system_setup.getserial()
+        self._statusDict["deviceInfo"]["unique_id"] = system_setup.get_unique_id()
+        self._statusDict["deviceInfo"]["firmwareVersion"] = self.version
+        self._statusDict["deviceInfo"]["sinceDate"] = self._since_date
 
-    def __init_stats_db(self):
+    def _init_stats_db(self):
         with sqlite3.connect("stats.db") as conn:
             # TODO: consider populating table for aggregated results with trigger.
             conn.execute("create table if not exists stats_log(ts int, mode int, value real)")
@@ -202,7 +200,7 @@ class ControlThread(threading.Thread):
                     now = datetime.utcnow().date().strftime("%Y-%m-%d")
                     conn.execute("insert into stats values (?, ?, ?)", (now, self._distill_mode, 0))
 
-    def __load_total_run_minutes(self):
+    def _load_total_run_minutes(self):
         with sqlite3.connect("stats.db") as conn:
             cur = conn.execute("select date_since, value from stats where mode = ?", (self._distill_mode,))
             row = cur.fetchone()
@@ -212,7 +210,7 @@ class ControlThread(threading.Thread):
             self._last_distill_runtime_total = 0
             self._logger.info("Initialized device stats, total run minutes %s since %s.", value, since_date)
 
-    def __increment_run_counters(self, value):
+    def _increment_run_counters(self, value):
         if value > 0:
             # update distill runtime total
             delta = value - self._last_distill_runtime_total
@@ -228,160 +226,72 @@ class ControlThread(threading.Thread):
                     # but we'll be able to do that without schema change.
                     conn.execute("insert into stats_log values (?, ?, ?)", (int(now), 1, int(delta)))
 
-    def __reset_session_counter(self):
+    def _reset_session_counter(self):
         self._last_distill_runtime_total = 0
 
 
-    def __show_connectivity(self):
+    def _show_connectivity(self):
         if False:
-            self._myHardwareControlSystem._myphysicalinterface.do_connected_flash()
+            self._hardwareControlSystem._myphysicalinterface.do_connected_flash()
         else:
-            self._myHardwareControlSystem._myphysicalinterface.do_disconnected_flash()
+            self._hardwareControlSystem._myphysicalinterface.do_disconnected_flash()
 
-    def __update_PhysicalUI(self):
+    def _update_PhysicalUI(self):
         if self._reset_request_counter > 0:
             return
 
-        if not self._myHardwareControlSystem._myphysicalinterface:
+        if not self._hardwareControlSystem._myphysicalinterface:
             return
 
         if (
-            self._myHardwareControlSystem.FSM.curHandle == "Ready"
-            and not self._myHardwareControlSystem.FSM.fsmData["running_flag"]
+            self._hardwareControlSystem.FSM.curHandle == "Ready"
+            and not self._hardwareControlSystem.FSM.fsmData["running_flag"]
         ):
-            self._myHardwareControlSystem._myphysicalinterface.set_state(
+            self._hardwareControlSystem._myphysicalinterface.set_state(
                 module_physicalinterface.DeviceState.READY
             )
-        elif self._myHardwareControlSystem.FSM.curHandle == "Error":
-            self._myHardwareControlSystem._myphysicalinterface.set_state(
+        elif self._hardwareControlSystem.FSM.curHandle == "Error":
+            self._hardwareControlSystem._myphysicalinterface.set_state(
                 module_physicalinterface.DeviceState.ERROR
             )
-        elif self._myHardwareControlSystem.FSM.curHandle == "DistillBulk":
-            if self._myHardwareControlSystem.FSM.fsmData["pause_flag"]:
-                self._myHardwareControlSystem._myphysicalinterface.set_state(
+        elif self._hardwareControlSystem.FSM.curHandle == "DistillBulk":
+            if self._hardwareControlSystem.FSM.fsmData["pause_flag"]:
+                self._hardwareControlSystem._myphysicalinterface.set_state(
                     module_physicalinterface.DeviceState.PAUSE
                 )
             else:
-                self._myHardwareControlSystem._myphysicalinterface.set_state(
+                self._hardwareControlSystem._myphysicalinterface.set_state(
                     module_physicalinterface.DeviceState.RUNNING_PAUSE_ENABLED
                 )
-        elif self._myHardwareControlSystem.FSM.curHandle == "CleanPump":
-            if self._myHardwareControlSystem.FSM.fsmData["pause_flag"]:
-                self._myHardwareControlSystem._myphysicalinterface.set_state(
+        elif self._hardwareControlSystem.FSM.curHandle == "CleanPump":
+            if self._hardwareControlSystem.FSM.fsmData["pause_flag"]:
+                self._hardwareControlSystem._myphysicalinterface.set_state(
                     module_physicalinterface.DeviceState.PAUSE
                 )
             else:
-                self._myHardwareControlSystem._myphysicalinterface.set_state(
+                self._hardwareControlSystem._myphysicalinterface.set_state(
                     module_physicalinterface.DeviceState.RUNNING_PAUSE_ENABLED
                 )
         else:
-            self._myHardwareControlSystem._myphysicalinterface.set_state(
+            self._hardwareControlSystem._myphysicalinterface.set_state(
                 module_physicalinterface.DeviceState.RUNNING_PAUSE_DISABLED
             )
 
-
-    def check_alcohol_level(self):
-        # ALCOHOL CHECK START
-        # check ambient alcohol levels
-        _previous_alcohol_level = None
-        alcohol_level = None
-        try:
-            if self._myHardwareControlSystem.FSM.curHandle != "Error":
-                alcohol_level = self._myHardwareControlSystem.alcohol_level
-        except HardwareFailure:
-            self._logger.error("Electrical error. Entering error state...")
-            self._myHardwareControlSystem.do_fast_blink()
-            self._myHardwareControlSystem.FSM.ToTransistion("toStateError")
-
-        # print("Alcohol level message: {}".format(alcohol_level.value))
-        # print("Raw alcohol level: {}".format(s))
-        # _previous_alcohol_level = alcohol_level
-
-        # log the alcohol level
-        if hasattr(self._myHardwareControlSystem, "myalcoholdatalogger"):
-            # datalogging is on
-            # log once per second
-            if self._last_log_second != int(datetime.now().timestamp()):
-                self._last_log_second = int(datetime.now().timestamp())
-                logdate = "{:%Y-%m-%d-%H:%M:%S}".format(datetime.now())
-
-                data = {
-                    "Time": logdate,
-                    "AlcoholLevel": self._myHardwareControlSystem.alcohol_level_raw,
-                }
-                self._myHardwareControlSystem.myalcoholdatalogger.append_data(
-                    data
-                )
-
-        if alcohol_level is module_alcoholsensor.AlcoholLevelMessage.DANGER:
-            self._logger.warning("Alcohol level critical - stop now!")
-
-            try:
-                self._myHardwareControlSystem._mypump.pump_pwm = 0
-            except Exception as error:
-                self._logger.exception("Failed to shutdown pump:")
-
-            try:
-                self._myHardwareControlSystem.bottom_heater_power = 0
-            except Exception as error:
-                self._logger.exception("Failed to shutdown heater:")
-
-            try:
-                self._myHardwareControlSystem._valve_controller.shutdown()
-            except Exception as error:
-                self._logger.exception("Failed to shutdown valves:")
-
-            try:
-                self._myHardwareControlSystem._myalcoholsensor.shutdown()
-            except Exception as error:
-                self._logger.exception("Failed to shutdown alcohol sensor:")
-
-            # set failure mode
-            self._myHardwareControlSystem.FSM.fsmData[
-                "failure_mode"
-            ] = FailureMode.ALCOHOL_GASLEVEL_ERROR
-            # display failure mode in display
-            # self._myHardwareControlSystem.show_error_code_in_display()
-            # Transition to Error state.
-            self._myHardwareControlSystem.FSM.ToTransistion("toStateError")
-    # # ALCOHOL CHECK STOP
-
-    def check_fan_is_off(self):
-        try:
-            self._logger.info("Checking fan status on boot.")
-            status = self._myHardwareControlSystem._fan_control.fan_adc_check
-            # This check expects that fan is off as it's performed on device start.
-            if status != module_fancontrol.FAN_ADC_LEVEL_OFF:
-                self._logger.info("Reading fan status as {}.".format(status))
-                self._myHardwareControlSystem._myphysicalinterface.set_state(
-                    module_physicalinterface.DeviceState.ERROR
-                )
-                self._myHardwareControlSystem.FSM.fsmData["failure_mode"] = FailureMode.FAN_ERROR
-                self._myHardwareControlSystem.FSM.ToTransistion("toStateError")
-                self._myHardwareControlSystem.FSM.fsmData["failure_description"] = (
-                    "Error, air fan seems to be defective. Please try again and if it still fails, contact drizzle "
-                    "support."
-                )
-        except NotSupportedFanError:
-            # This exception means that device does't support fan and there is nothing to do.
-            self._logger.info("Fan not supported on this hardware.")
-
-
     def schedule_command_for_execution(self, command: BaseCommand):        
         self._logger.info("Scheduling command for execution")
-        command.validate_state(self._myHardwareControlSystem)
+        command.validate_state(self._hardwareControlSystem)
         self._scheduledCommand=command
 
     def get_machine_json_status(self):
-        curHandle = self._myHardwareControlSystem.FSM.curHandle
-        self._statusObject["timestamp"] = int(time.time())
-        self._statusObject["currentStatus"] = curHandle
-        self._statusObject["deviceInfo"]["runMinutesSince"] = self._distill_runtime_total
+        curHandle = self._hardwareControlSystem.FSM.curHandle
+        self._statusDict["timestamp"] = int(time.time())
+        self._statusDict["currentStatus"] = curHandle
+        self._statusDict["deviceInfo"]["runMinutesSince"] = self._distill_runtime_total
 
-        activeProgramDict=self._statusObject["activeProgram"]
+        activeProgramDict=self._statusDict["activeProgram"]
 
         if curHandle == "Ready":
-            self._statusObject["machineState"] = "idle"
+            self._statusDict["machineState"] = "idle"
             activeProgramDict["progress"] = None
             activeProgramDict["programId"] = None
             activeProgramDict["currentAction"] = None
@@ -390,14 +300,14 @@ class ControlThread(threading.Thread):
             activeProgramDict["warning"] = None
             activeProgramDict["errorMessage"] = None
         elif curHandle == "Error":
-            self._statusObject["machineState"] = "error"
+            self._statusDict["machineState"] = "error"
             activeProgramDict["currentAction"] = "Error"
-            activeProgramDict["errorMessage"] = self._myHardwareControlSystem.FSM.fsmData["failure_description"]
+            activeProgramDict["errorMessage"] = self._hardwareControlSystem.FSM.fsmData["failure_description"]
         else:
-            if self._myHardwareControlSystem.FSM.fsmData["pause_flag"]:
-                self._statusObject["machineState"] = "pause"
+            if self._hardwareControlSystem.FSM.fsmData["pause_flag"]:
+                self._statusDict["machineState"] = "pause"
             else:
-                self._statusObject["machineState"] = "running"
+                self._statusDict["machineState"] = "running"
 
             program_string = "none"
             try:
@@ -406,77 +316,77 @@ class ControlThread(threading.Thread):
             except ValueError:
                 pass
 
-            activeProgramDict["progress"] = self._myHardwareControlSystem.FSM.curState.progressPercentage
+            activeProgramDict["progress"] = self._hardwareControlSystem.FSM.curState.progressPercentage
             activeProgramDict["programId"] = program_string
-            activeProgramDict["currentAction"] = self._myHardwareControlSystem.FSM.curState.humanReadableLabel
-            activeProgramDict["estimatedTimeLeft"] = self._myHardwareControlSystem.FSM.curState.estimatedTimeLeftSeconds
-            activeProgramDict["timeElapsed"] = self._myHardwareControlSystem.FSM.curState.eventDurationWithPause
-            activeProgramDict["warning"] = self._myHardwareControlSystem.FSM.curState.warning
+            activeProgramDict["currentAction"] = self._hardwareControlSystem.FSM.curState.humanReadableLabel
+            activeProgramDict["estimatedTimeLeft"] = self._hardwareControlSystem.FSM.curState.estimatedTimeLeftSeconds
+            activeProgramDict["timeElapsed"] = self._hardwareControlSystem.FSM.curState.eventDurationWithPause
+            activeProgramDict["warning"] = self._hardwareControlSystem.FSM.curState.warning
             activeProgramDict["errorMessage"] = None
         
-        return self._statusObject
+        return self._statusDict
 
 
     #Invoked from control thread - Updates statusobject with values read from hardware
     def _update_hardware_status(self):
         try:
-            pressure = self._myHardwareControlSystem.pressure
+            pressure = self._hardwareControlSystem.pressure
         except Exception:
             pressure = None
 
-        self._statusObject["hardwareMonitor"] =  {
-            "pump_power": self._myHardwareControlSystem.pump_value,
-            "heater_pct": self._myHardwareControlSystem.bottom_heater_percent,
-            "fan_pwm": self._myHardwareControlSystem.fan_value,
-            "fan_adc_value": self._myHardwareControlSystem._fan_control.fan_adc_value,
-            "fan_adc_check": self._myHardwareControlSystem._fan_control.fan_adc_check_string,
+        self._statusDict["hardwareMonitor"] =  {
+            "pump_power": self._hardwareControlSystem.pump_value,
+            "heater_pct": self._hardwareControlSystem.bottom_heater_percent,
+            "fan_pwm": self._hardwareControlSystem.fan_value,
+            "fan_adc_value": self._hardwareControlSystem._fan_control.fan_adc_value,
+            "fan_adc_check": self._hardwareControlSystem._fan_control.fan_adc_check_string,
             "pressure": pressure,
-            "gas_temp": self._myHardwareControlSystem.gas_temperature,
-            "bottom_heater_power": self._myHardwareControlSystem.bottom_heater_percent,
-            "bottom_heater_temperature": self._myHardwareControlSystem.bottom_temperature,
+            "gas_temp": self._hardwareControlSystem.gas_temperature,
+            "bottom_heater_power": self._hardwareControlSystem.bottom_heater_percent,
+            "bottom_heater_temperature": self._hardwareControlSystem.bottom_temperature,
         }
-        self._statusObject["hardwareMonitor"].update(self._myHardwareControlSystem.valve_status)
+        self._statusDict["hardwareMonitor"].update(self._hardwareControlSystem.valve_status)
 
-        self._statusObject["programParameters"] = {
-            "soakTime": self._myHardwareControlSystem._config["SYSTEM"]["soak_time_seconds"],
-            "number_of_flushes": self._myHardwareControlSystem._config["FSM_EX"]["number_of_flushes"],
-            "dist_temperature": self._myHardwareControlSystem._config["FSM_EV"]["distillation_temperature"],
-            "wattage_decrease_limit": self._myHardwareControlSystem._config["PID"]["wattage_decrease_limit"],
-            "after_heat_time": self._myHardwareControlSystem._config["FSM_EV"]["after_heat_time"],
-            "after_heat_temp": self._myHardwareControlSystem._config["FSM_EV"]["after_heat_temp"],
-            "final_air_cycles": self._myHardwareControlSystem._config["FSM_EV"]["final_air_cycles"],
-            "final_air_cycles_time_open": self._myHardwareControlSystem._config["FSM_EV"]["final_air_cycles_time_open"],
-            "final_air_cycles_time_closed": self._myHardwareControlSystem._config["FSM_EV"]["final_air_cycles_time_closed"],
+        self._statusDict["programParameters"] = {
+            "soakTime": self._hardwareControlSystem._config["SYSTEM"]["soak_time_seconds"],
+            "number_of_flushes": self._hardwareControlSystem._config["FSM_EX"]["number_of_flushes"],
+            "dist_temperature": self._hardwareControlSystem._config["FSM_EV"]["distillation_temperature"],
+            "wattage_decrease_limit": self._hardwareControlSystem._config["PID"]["wattage_decrease_limit"],
+            "after_heat_time": self._hardwareControlSystem._config["FSM_EV"]["after_heat_time"],
+            "after_heat_temp": self._hardwareControlSystem._config["FSM_EV"]["after_heat_temp"],
+            "final_air_cycles": self._hardwareControlSystem._config["FSM_EV"]["final_air_cycles"],
+            "final_air_cycles_time_open": self._hardwareControlSystem._config["FSM_EV"]["final_air_cycles_time_open"],
+            "final_air_cycles_time_closed": self._hardwareControlSystem._config["FSM_EV"]["final_air_cycles_time_closed"],
         }
 
 #-----------------------------------------------------------------------------------------
 # Functions that checks state of physical buttons presses and performs actions if pressed
 # invoked by the control thread
 #-----------------------------------------------------------------------------------------
-    def check_PhysicalInterface(self):
+    def _check_PhysicalInterface(self):
         # if there has been a reset request recheck it!
         if self._reset_request_counter > 0:
-            button_press = self._myHardwareControlSystem.button_press_force
+            button_press = self._hardwareControlSystem.button_press_force
             if button_press is module_physicalinterface.ButtonPressed.RESET:
                 self._reset_request_counter += 1
 
                 # check if it is time for a reset
-                self.check_for_button_reset()
+                self._check_for_button_reset()
                 return
             else:
                 self._reset_request_counter = 0
-                self._myHardwareControlSystem._myphysicalinterface.set_state(
+                self._hardwareControlSystem._myphysicalinterface.set_state(
                     self._last_display_state
                 )
 
         # if there has been a wifi connectivity request (select) recheck it!
         if self._select_request_counter > 0:
             # print('Select counter: {}'.format(self._select_request_counter))
-            button_press = self._myHardwareControlSystem.button_press_force
+            button_press = self._hardwareControlSystem.button_press_force
             if button_press is module_physicalinterface.ButtonPressed.SELECT:
                 self._select_request_counter += 1
                 # check if it is time for a display of connectivity
-                self.check_for_button_select()
+                self._check_for_button_select()
                 return
             else:
                 self._select_request_counter = 0
@@ -484,7 +394,7 @@ class ControlThread(threading.Thread):
         # if there has been a print labe request (select) recheck it!
         if self._pause_request_counter > 0:
             # print('Select counter: {}'.format(self._select_request_counter))
-            button_press = self._myHardwareControlSystem.button_press_force
+            button_press = self._hardwareControlSystem.button_press_force
             if button_press is module_physicalinterface.ButtonPressed.PAUSE:
                 self._pause_request_counter += 1
                 # check if it is time for a display of connectivity
@@ -495,20 +405,20 @@ class ControlThread(threading.Thread):
 
         # if there has been a force afterstill press - recheck it!
         if self._play_request_counter > 0:
-            button_press = self._myHardwareControlSystem.button_press_force
+            button_press = self._hardwareControlSystem.button_press_force
             if button_press is module_physicalinterface.ButtonPressed.PLAY:
                 self._play_request_counter += 1
                 # check if it is time for a display of connectivity
-                self.check_for_button_play()
+                self._check_for_button_play()
                 return
             else:
                 self._play_request_counter = 0
 
-        button_press = self._myHardwareControlSystem.button_press
+        button_press = self._hardwareControlSystem.button_press
 
         if button_press is module_physicalinterface.ButtonPressed.SELECT:
             # may only run if state is ready, otherwise just ignore
-            if self._myHardwareControlSystem.FSM.curHandle != "Ready":
+            if self._hardwareControlSystem.FSM.curHandle != "Ready":
                 return
 
             self._select_request_counter += 1
@@ -516,10 +426,10 @@ class ControlThread(threading.Thread):
             self._selected_program += 1
             if self._selected_program > 4:
                 self._selected_program = 1
-            self._myHardwareControlSystem._myphysicalinterface.set_program(
+            self._hardwareControlSystem._myphysicalinterface.set_program(
                 self._selected_program
             )
-            self._myHardwareControlSystem._myphysicalinterface.set_state(
+            self._hardwareControlSystem._myphysicalinterface.set_state(
                 module_physicalinterface.DeviceState.READY
             )
 
@@ -527,14 +437,14 @@ class ControlThread(threading.Thread):
             self._logger.debug("User pressed play")
             # may only run if state is ready, otherwise just ignore or is in pause mode
             if (
-                self._myHardwareControlSystem.FSM.curHandle != "Ready"
-                and self._myHardwareControlSystem.FSM.curHandle not in ("DistillBulk", "CleanPump")
+                self._hardwareControlSystem.FSM.curHandle != "Ready"
+                and self._hardwareControlSystem.FSM.curHandle not in ("DistillBulk", "CleanPump")
             ):
                 # Machine is running, use the buttonpress to toggle LED state
-                self._myHardwareControlSystem.toggle_light()
+                self._hardwareControlSystem.toggle_light()
                 return
 
-            if self._myHardwareControlSystem.FSM.curHandle == "Ready":
+            if self._hardwareControlSystem.FSM.curHandle == "Ready":
                 if self._selected_program == 1:
                     self._logger.debug("Extracting")
                     self.schedule_command_for_execution(Command_StartExtraction(runFull=True))
@@ -555,14 +465,14 @@ class ControlThread(threading.Thread):
                     self._logger.debug("Invalid program %r, ignoring...", self._selected_program)
                     return
 
-            elif self._myHardwareControlSystem.FSM.curHandle in ("DistillBulk", "CleanPump"):
+            elif self._hardwareControlSystem.FSM.curHandle in ("DistillBulk", "CleanPump"):
                 # if distillation is running, toggle white light
                 self._play_request_counter += 1
-                if not self._myHardwareControlSystem.FSM.fsmData["pause_flag"]:
-                    self._myHardwareControlSystem.toggle_light()
+                if not self._hardwareControlSystem.FSM.fsmData["pause_flag"]:
+                    self._hardwareControlSystem.toggle_light()
 
                 # restart distillation
-                self._myHardwareControlSystem.FSM.SetFSMData("pause_flag", False)
+                self._hardwareControlSystem.FSM.SetFSMData("pause_flag", False)
             else:
                 self._user_feedback = "Error, wrong state for decarb run"
             # self._myHardwareControlSystem._myphysicalinterface.set_state(module_physicalinterface.STATE_RUNNING_PAUSE_ENABLED)
@@ -571,11 +481,11 @@ class ControlThread(threading.Thread):
             self._pause_request_counter += 1
             self._logger.debug("User pressed pause")
             # may only run if state is ready, otherwise just ignore or is in pause mode
-            if self._myHardwareControlSystem.FSM.curHandle not in ("DistillBulk", "CleanPump"):
+            if self._hardwareControlSystem.FSM.curHandle not in ("DistillBulk", "CleanPump"):
                 self._logger.debug("Machine is in wrong mode, ignore button press")
                 return
-            self._myHardwareControlSystem.FSM.SetFSMData("pause_flag", True)
-            self._myHardwareControlSystem._myphysicalinterface.set_state(
+            self._hardwareControlSystem.FSM.SetFSMData("pause_flag", True)
+            self._hardwareControlSystem._myphysicalinterface.set_state(
                 module_physicalinterface.DeviceState.PAUSE
             )
 
@@ -583,34 +493,122 @@ class ControlThread(threading.Thread):
             self._logger.debug("User pressed reset")
             # store existing state
             self._last_display_state = (
-                self._myHardwareControlSystem._myphysicalinterface._state
+                self._hardwareControlSystem._myphysicalinterface._state
             )
             self._reset_request_counter += 1
-            self._myHardwareControlSystem._myphysicalinterface.set_state(
+            self._hardwareControlSystem._myphysicalinterface.set_state(
                 module_physicalinterface.DeviceState.RESET_WARNING
             )
 
-    def check_for_button_reset(self):
+    def _check_for_button_reset(self):
         if self._reset_request_counter > RESET_COUNTER:
             # user requested reset
-            self.reset_machine()
+            self.schedule_command_for_execution(Command_Reset())
 
-    def check_for_button_select(self):
+    def _check_for_button_select(self):
         # print('Buttons select counter: {}'.format(self._select_request_counter))
         if self._select_request_counter > SELECT_COUNTER_SHOW_CONNECTIVITY:
             self._logger.debug("Showing connectivity")
             # user requested display of wifi status
-            self.__show_connectivity()
-
+            self._show_connectivity()
             self._select_request_counter = 0
 
-    def check_for_button_play(self):
+    def _check_for_button_play(self):
         if self._play_request_counter > PLAY_COUNTER_AFTERSTILL:
             self._logger.debug("Forcing afterstill")
-            self._myHardwareControlSystem._myphysicalinterface.do_force_afterstill_blink()
-            self._myHardwareControlSystem.FSM.SetFSMData("force_afterstill", True)
-
+            self._hardwareControlSystem._myphysicalinterface.do_force_afterstill_blink()
+            self._hardwareControlSystem.FSM.SetFSMData("force_afterstill", True)
             self._play_request_counter = 0
+
+#-----------------------------------------------------------------------------------------
+# Functions that checks hardware status
+# invoked by the control thread
+#-----------------------------------------------------------------------------------------
+    def _check_alcohol_level(self):
+        # ALCOHOL CHECK START
+        # check ambient alcohol levels
+        _previous_alcohol_level = None
+        alcohol_level = None
+        try:
+            if self._hardwareControlSystem.FSM.curHandle != "Error":
+                alcohol_level = self._hardwareControlSystem.alcohol_level
+        except HardwareFailure:
+            self._logger.error("Electrical error. Entering error state...")
+            self._hardwareControlSystem.do_fast_blink()
+            self._hardwareControlSystem.FSM.ToTransistion("toStateError")
+
+        # print("Alcohol level message: {}".format(alcohol_level.value))
+        # print("Raw alcohol level: {}".format(s))
+        # _previous_alcohol_level = alcohol_level
+
+        # log the alcohol level
+        if hasattr(self._hardwareControlSystem, "myalcoholdatalogger"):
+            # datalogging is on
+            # log once per second
+            if self._last_log_second != int(datetime.now().timestamp()):
+                self._last_log_second = int(datetime.now().timestamp())
+                logdate = "{:%Y-%m-%d-%H:%M:%S}".format(datetime.now())
+
+                data = {
+                    "Time": logdate,
+                    "AlcoholLevel": self._hardwareControlSystem.alcohol_level_raw,
+                }
+                self._hardwareControlSystem.myalcoholdatalogger.append_data(
+                    data
+                )
+
+        if alcohol_level is module_alcoholsensor.AlcoholLevelMessage.DANGER:
+            self._logger.warning("Alcohol level critical - stop now!")
+
+            try:
+                self._hardwareControlSystem._mypump.pump_pwm = 0
+            except Exception as error:
+                self._logger.exception("Failed to shutdown pump:")
+
+            try:
+                self._hardwareControlSystem.bottom_heater_power = 0
+            except Exception as error:
+                self._logger.exception("Failed to shutdown heater:")
+
+            try:
+                self._hardwareControlSystem._valve_controller.shutdown()
+            except Exception as error:
+                self._logger.exception("Failed to shutdown valves:")
+
+            try:
+                self._hardwareControlSystem._myalcoholsensor.shutdown()
+            except Exception as error:
+                self._logger.exception("Failed to shutdown alcohol sensor:")
+
+            # set failure mode
+            self._hardwareControlSystem.FSM.fsmData[
+                "failure_mode"
+            ] = FailureMode.ALCOHOL_GASLEVEL_ERROR
+            # display failure mode in display
+            # self._myHardwareControlSystem.show_error_code_in_display()
+            # Transition to Error state.
+            self._hardwareControlSystem.FSM.ToTransistion("toStateError")
+    # # ALCOHOL CHECK STOP
+
+    def check_fan_is_off(self):
+        try:
+            self._logger.info("Checking fan status on boot.")
+            status = self._hardwareControlSystem._fan_control.fan_adc_check
+            # This check expects that fan is off as it's performed on device start.
+            if status != module_fancontrol.FAN_ADC_LEVEL_OFF:
+                self._logger.info("Reading fan status as {}.".format(status))
+                self._hardwareControlSystem._myphysicalinterface.set_state(
+                    module_physicalinterface.DeviceState.ERROR
+                )
+                self._hardwareControlSystem.FSM.fsmData["failure_mode"] = FailureMode.FAN_ERROR
+                self._hardwareControlSystem.FSM.ToTransistion("toStateError")
+                self._hardwareControlSystem.FSM.fsmData["failure_description"] = (
+                    "Error, air fan seems to be defective. Please try again and if it still fails, contact drizzle "
+                    "support."
+                )
+        except NotSupportedFanError:
+            # This exception means that device does't support fan and there is nothing to do.
+            self._logger.info("Fan not supported on this hardware.")
 
 #-----------------------------------------------------------------------------------------
 # The control loop
@@ -628,38 +626,38 @@ class ControlThread(threading.Thread):
         _last_time_update_app_timestamp = None
         self._running = True
         _logged_control_loop = False
-        self._heartbeet.set()
+        self._heartbeat.set()
 
         try:
             # main control loop
             while self._running:
-                self._heartbeet.set()
+                self._heartbeat.set()
 
                 if (int(time.time()) % 600) == 0 and not _logged_control_loop:
                     self._logger.debug("Control loop is running. Device FSM state: {}, FSM handle {}. Pause flag {}.".format(
-                        self._myHardwareControlSystem.FSM.curState.name,
-                        self._myHardwareControlSystem.FSM.curHandle,
-                        self._myHardwareControlSystem.FSM.fsmData["pause_flag"],
+                        self._hardwareControlSystem.FSM.curState.name,
+                        self._hardwareControlSystem.FSM.curHandle,
+                        self._hardwareControlSystem.FSM.fsmData["pause_flag"],
                     ))
                     _logged_control_loop = True
                 elif (int(time.time()) % 600) != 0 and _logged_control_loop:
                     _logged_control_loop = False
 
                 # check for config changes
-                self._myHardwareControlSystem.update_config()
+                self._hardwareControlSystem.update_config()
 
                 # Check physical interface
-                self.check_PhysicalInterface()
+                self._check_PhysicalInterface()
 
                 if ALCOHOL_SENSOR_ENABLED:
-                    self.check_alcohol_level()
+                    self._check_alcohol_level()
 
                 # Capture run time miutes for distill state.
-                if self._myHardwareControlSystem.FSM.curHandle == "DistillBulk":
-                    counter = self._myHardwareControlSystem.FSM.curState.eventDurationWithPause
+                if self._hardwareControlSystem.FSM.curHandle == "DistillBulk":
+                    counter = self._hardwareControlSystem.FSM.curState.eventDurationWithPause
                     runtime_minutes = int(counter / 60)
                     if (runtime_minutes - self._last_distill_runtime_total) > 0:
-                        self.__increment_run_counters(runtime_minutes)
+                        self._increment_run_counters(runtime_minutes)
 
                 hasExecutedCommand=False
                 #Check if there is a command to be executed, if so validate and execute it
@@ -667,37 +665,37 @@ class ControlThread(threading.Thread):
                 self._scheduledCommand=None
                 if self._activeCommand!=None:
                     self._logger.info("Executing scheduled command")
-                    self._activeCommand.validate_state(self._myHardwareControlSystem)
-                    self._activeCommand.execute(self._myHardwareControlSystem)
+                    self._activeCommand.validate_state(self._hardwareControlSystem)
+                    self._activeCommand.execute(self._hardwareControlSystem)
                     self._logger.info("Finished executing scheduled command")
                     hasExecutedCommand=True
 
                 # Process FSM
                 try:
-                    self._myHardwareControlSystem.FSM.Execute()
+                    self._hardwareControlSystem.FSM.Execute()
 
                 except HardwareFailure:
                     self._logger.error("Electrical error. Entering error state...")
-                    self._myHardwareControlSystem.do_fast_blink()
-                    self._myHardwareControlSystem.FSM.ToTransistion("toStateError")
+                    self._hardwareControlSystem.do_fast_blink()
+                    self._hardwareControlSystem.FSM.ToTransistion("toStateError")
 
                 except Exception as e:
                     self._logger.exception("FSM state transition failed: {!r}".format(e))
-                    self._myHardwareControlSystem.FSM.fsmData["failure_mode"] = FailureMode.UNKNOWN_ERROR
-                    self._myHardwareControlSystem.FSM.ToTransistion("toStateError")
+                    self._hardwareControlSystem.FSM.fsmData["failure_mode"] = FailureMode.UNKNOWN_ERROR
+                    self._hardwareControlSystem.FSM.ToTransistion("toStateError")
 
                 # self.adjust_logging_level()  # TODO: temporary disable to investigate issues with unresponsiveness.
 
-                if self._myHardwareControlSystem.FSM.curHandle == "Ready":
-                    if self._myHardwareControlSystem._PID.PID_running:
-                        self._myHardwareControlSystem.set_PID_target(self._myHardwareControlSystem.FSM.fsmData["target_temp"])
+                if self._hardwareControlSystem.FSM.curHandle == "Ready":
+                    if self._hardwareControlSystem._PID.PID_running:
+                        self._hardwareControlSystem.set_PID_target(self._hardwareControlSystem.FSM.fsmData["target_temp"])
                         # if adjustment period has run, start next cycle
-                        self._myHardwareControlSystem.update_PID()
+                        self._hardwareControlSystem.update_PID()
                     else:
-                        self._myHardwareControlSystem._mybottomheater.power_percent = 0
+                        self._hardwareControlSystem._mybottomheater.power_percent = 0
 
                 # Update the UI
-                self.__update_PhysicalUI()
+                self._update_PhysicalUI()
 
                 # Hardware error can also happen here because when creating app payload we're reading
                 # some of the sensors: pressure, temperature, etc.
@@ -708,8 +706,8 @@ class ControlThread(threading.Thread):
                         self._update_hardware_status()
                 except HardwareFailure:
                     self._logger.error("Electrical error. Entering error state...")
-                    self._myHardwareControlSystem.do_fast_blink()
-                    self._myHardwareControlSystem.FSM.ToTransistion("toStateError")
+                    self._hardwareControlSystem.do_fast_blink()
+                    self._hardwareControlSystem.FSM.ToTransistion("toStateError")
 
                 # timing signal - 100 ms period
                 time.sleep(.01)
@@ -724,4 +722,4 @@ class ControlThread(threading.Thread):
     def stop(self):
         self._running = False
         self._logger.debug("ControlThread:stop - Shutting down hardwarecontrolsystem.")
-        self._myHardwareControlSystem.shutdown()
+        self._hardwareControlSystem.shutdown()

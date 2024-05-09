@@ -1,5 +1,5 @@
-from flask import Flask, request, render_template,jsonify      
-import sys, traceback, time
+from flask import Flask, render_template,jsonify      
+import sys, time
 import controlthread as controlthread
 from hardware.commands.start_extraction import Command_StartExtraction
 from hardware.commands.start_heat_oil import Command_StartHeatOil
@@ -48,31 +48,29 @@ def start(programId: int):
     else:
         return jsonify({"type": "","description": "Invalid programId: " + programId }), 409
 
-    return process_command(command)
+    return _process_command(command)
 
 @app.route("/api/pause", methods = ['POST'])
 def pause():
-    return process_command(Command_PauseProgram())
+    return _process_command(Command_PauseProgram())
 
 @app.route("/api/resume", methods = ['POST'])
 def resume():
-    return process_command(Command_ResumeProgram())
+    return _process_command(Command_ResumeProgram())
 
 @app.route("/api/reset", methods = ['POST'])
 def reset():
-    return process_command(Command_Reset())
-
+    return _process_command(Command_Reset())
 
 @app.route("/api/startcleanpump", methods = ['POST'])
 def start_clean_pump():
-    return process_command(Command_StartCleanPump())
+    return _process_command(Command_StartCleanPump())
 
 @app.route("/api/cleanvalve/<int:valvenumber>", methods = ['POST'])
 def clean_valve(valvenumber: int):
-    return process_command(Command_CleanValve(valvenumber))
+    return _process_command(Command_CleanValve(valvenumber))
 
-
-def process_command(command):
+def _process_command(command):
     global control_thread 
     try:
         control_thread.schedule_command_for_execution(command)
@@ -80,15 +78,12 @@ def process_command(command):
         time.sleep(.04)
         return control_thread.get_machine_json_status()
     except Exception as error:
-        exc_info = sys.exc_info()
-        sExceptionInfo = ''.join(traceback.format_exception(*exc_info))
         exc_type, exc_value, exc_context = sys.exc_info()
-
         responseJson = jsonify( 
             {
                 "type": exc_type.__name__,
                 "description": str(exc_value),
-                #"details": sExceptionInfo 
+                #"details": exc_context 
             }
         )
         return responseJson, 409
