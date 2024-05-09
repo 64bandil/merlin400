@@ -80,7 +80,6 @@ class PressureSensorFailure(HardwareFailure):
 
 
 class module_HardwareControlSystem(Machine):
-
     ###---===PHYSICAL HARDWARE CONSTANTS===---###
     # i2C ADDRESSES
     I2C_ADDRESS_PRESSURE_SENSOR = 0x76
@@ -124,21 +123,7 @@ class module_HardwareControlSystem(Machine):
         self.init_status = None
         self.init_errors = []
 
-        # INIT LOGGING BELOW
-        # open a file for logging
-        dt = datetime.datetime.now()
-
-        self.logdir = LOGS_DIRECTORY.as_posix()
-
-        # check for log dir and create it if not existing
-        if not os.path.exists(self.logdir):
-            os.makedirs(self.logdir)
-
-        # store data logfile name
-        self._logfilenamedata = "{}/drizzle_data_log_{}.txt".format(self.logdir, dt.year)
-
         # INIT HARDWARE BELOW
-
         self._logger.debug("Initializing  valve controller")
         # Init valve controller
         try:
@@ -965,22 +950,6 @@ class module_HardwareControlSystem(Machine):
             pressure_slope = 0
 
         return pressure_slope
-
-    #reads the system ssid and password
-    @property
-    def get_ssid_and_passwd(self):
-        hostfile = '/etc/hostapd/hostapd.conf'
-        myssid = ''
-        mypasswd = ''
-        with open(hostfile) as f:
-            lines = f.readlines()
-        for line in lines:
-            if 'ssid' in line:
-                myssid = line.split('=')[1]
-            if 'wpa_passphrase' in line:
-                mypasswd = line.split('=')[1]
-        return (myssid, mypasswd)
-
 
     ###---===SIMPLE HARDWARE MACROS===---###
 

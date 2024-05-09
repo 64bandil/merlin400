@@ -426,12 +426,8 @@ class ControlThread(threading.Thread):
             self._selected_program += 1
             if self._selected_program > 4:
                 self._selected_program = 1
-            self._hardwareControlSystem._myphysicalinterface.set_program(
-                self._selected_program
-            )
-            self._hardwareControlSystem._myphysicalinterface.set_state(
-                module_physicalinterface.DeviceState.READY
-            )
+            self._hardwareControlSystem._myphysicalinterface.set_program(self._selected_program)
+            self._hardwareControlSystem._myphysicalinterface.set_state(module_physicalinterface.DeviceState.READY)
 
         elif button_press is module_physicalinterface.ButtonPressed.PLAY:
             self._logger.debug("User pressed play")
