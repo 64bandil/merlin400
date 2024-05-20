@@ -1,0 +1,14 @@
+[Unit]
+Description=Drizzle Merlin 400 System Service
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/home/pi/merlin400-system 
+ExecStart=python src/startup.py
+Restart=always
+RestartSec=1
+StartLimitIntervalSec=0
+
+[Install]
+WantedBy=multi-user.target

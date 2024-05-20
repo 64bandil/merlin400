@@ -12,7 +12,8 @@ For installing and starting this software you must use SSH from a computer to lo
     <enter your Merlin's SSID password>
 
     sudo pip install github-clone
-    ghclone https://github.com/64bandil/merlin400/tree/main/merlin400-system
+    ghclone https://github.com/64bandil/merlin400/tree/main/merlin400-system    
+    sudo cp merlin400-system/merlin400-system.service /etc/systemd/system/
 
 ## Usage
 Before the new application can be started, the existing Drizzle applications must be stopped:
@@ -24,6 +25,4 @@ Before the new application can be started, the existing Drizzle applications mus
 
 To start the new application:
 
-    cd /home/pi/merlin400-system
-    sudo python src/startup.py
-
+    sudo systemctl start merlin400-system
