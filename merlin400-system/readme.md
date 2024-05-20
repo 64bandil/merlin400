@@ -20,8 +20,10 @@ Before the new application can be started, the existing Drizzle applications mus
 
 (These commands only stop the applications currently running. After reboot they will start up as before.)
 
-    sudo systemctl stop Drizzle
+    sudo systemctl stop drizzle
     sudo pkill -f python
+
+When the application is stopped "Play" button will blink green.
 
 To start the new application:
 
