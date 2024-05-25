@@ -33,6 +33,7 @@ To start the new application:
 
 ## Upgrade 
 After installation you can upgrade the application like this:
+
     sudo systemctl stop merlin400-system
     cd /home/pi
     ghclone https://github.com/64bandil/merlin400/tree/main/merlin400-system
