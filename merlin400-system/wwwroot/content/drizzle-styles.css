@@ -133,3 +133,8 @@ html, body {
   width: 2.0em;
   height:2.0em;
 }
+
+.valve-button {
+  width: 240px;
+  text-align: left;
+}

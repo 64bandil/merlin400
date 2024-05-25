@@ -10,7 +10,7 @@ class Command_CleanValve(BaseCommand):
             raise Exception("Valvenumber must be between 1 and 4")
         
         self._logger = get_app_logger(str(self.__class__))
-        self._valveString = "valve" + valveNumber
+        self._valveString = "valve" + str(valveNumber)
 
     def validate_state(self, hardwareControlSystem: module_HardwareControlSystem):
         pass

@@ -6,25 +6,19 @@
       <link rel="stylesheet" type="text/css" href="/content/drizzle-styles.css">
       <script src="/content/merlin400-api.js"></script>
 
-      <script>              
-        async function serverApi_reset() {
+      <script>
+        const $q=(arg)=>document.querySelector(arg);
+        const $qall=(arg)=>document.querySelectorAll(arg);
+
+      async function serverApi_post(url) {
           try {
-            const statusData = await AppContext.ApiClient.postJson('/api/reset');        
+            const statusData = await AppContext.ApiClient.postJson(url);        
             updateUIWithDataFromServer(statusData);
           } catch (error) {
             alert(error);
           }
         }
-
-        async function serverApi_pause() {
-          try {
-            const statusData = await AppContext.ApiClient.postJson('/api/pause');        
-            updateUIWithDataFromServer(statusData);
-          } catch (error) {
-            alert(error);
-          }
-        }
-
+        
         async function serverApi_startSelectedProgram() {
           try {
             const statusData = await AppContext.ApiClient.postJson('/api/start/' + AppContext.selectedProgram.id);        
@@ -35,17 +29,17 @@
         }
         
         function updateUIWithDataFromServer(data) {          
-          document.querySelector('#divError').innerHTML=data.activeProgram.errorMessage;
-          document.querySelector('#divError').style.visibility=data.activeProgram.errorMessage ? 'visible' : 'collapse';
-          document.querySelector('#tableActiveProgram').style.visibility=data.activeProgram.errorMessage ? 'collapse' : 'visible';
+          $q('#divError').innerHTML=data.activeProgram.errorMessage;
+          $q('#divError').style.visibility=data.activeProgram.errorMessage ? 'visible' : 'collapse';
+          $q('#tableActiveProgram').style.visibility=data.activeProgram.errorMessage ? 'collapse' : 'visible';
 
-          document.querySelector('#btnStart').disabled=data.machineState!="idle";
-          document.querySelector('#btnPause').disabled=data.machineState!="running";
-          document.querySelector('#btnStop').disabled=data.machineState!="running" && data.machineState!="error" && data.machineState!="pause";
+          $q('#btnStart').disabled=data.machineState!="idle";
+          $q('#btnPause').disabled=data.machineState!="running";
+          $q('#btnStop').disabled=data.machineState!="running" && data.machineState!="error" && data.machineState!="pause";
 
-          document.querySelector('#divStatus').innerHTML= 
+          $q('#divStatus').innerHTML= 
             (data.machineState ? data.machineState[0].toUpperCase() + data.machineState.slice(1) : n/a) + "<br/>" +
-            data.currentStatus + "<br/>" + data.timestamp;
+            data.currentStatus + "<br/>" + "Timestamp: " + data.timestamp;
 
           updateUI_setDeviceInfo(data.deviceInfo);
           updateUI_setHardwareStatus(data.hardwareMonitor);        
@@ -53,40 +47,43 @@
         }
 
         function updateUI_setDeviceInfo(deviceInfo) {
-          const infoText=`ID: ${deviceInfo.machine_id}, FW: ${deviceInfo.firmwareVersion}<br/>Run ${deviceInfo.runMinutesSince} minutes since ${deviceInfo.sinceDate}`;
-          document.querySelector('#divDevice').innerHTML=infoText;  
+          if(deviceInfo.machine_id?.startsWith("000000")) {
+            deviceInfo.machine_id=deviceInfo.machine_id.replace("000000","");
+          }          
+          $q('#divDevice').innerHTML=
+            `ID: ${deviceInfo.machine_id}, FW: ${deviceInfo.firmwareVersion}<br/>Run ${deviceInfo.runMinutesSince} minutes since ${deviceInfo.sinceDate}`;
         }
         
         function updateUI_setHardwareStatus(hardwareStatus) {        
-          document.querySelector('#tdGasTemperature').innerHTML=hardwareStatus.gas_temp?.toFixed(1) + ' °C';
-          document.querySelector('#tdPressure').innerHTML=hardwareStatus.pressure?.toFixed(1) + ' mbar';
-          document.querySelector('#tdPumpPower').innerHTML=parseInt(hardwareStatus.pump_power) + ' %';
-          document.querySelector('#tdHeaterPower').innerHTML=parseInt(hardwareStatus.bottom_heater_power) + ' %';
-          document.querySelector('#tdHeaterTemperature').innerHTML=hardwareStatus.bottom_heater_temperature?.toFixed(1) + ' °C';
-          document.querySelector('#tdFanADCValue').innerHTML=hardwareStatus.fan_adc_value?.toFixed(2);
-          document.querySelector('#tdValve1').innerHTML=(hardwareStatus.valve1==0 ? 'Open' : 'Closed') + ' (' + hardwareStatus.valve1 + ')';
-          document.querySelector('#tdValve2').innerHTML=(hardwareStatus.valve2==0 ? 'Open' : 'Closed') + ' (' + hardwareStatus.valve2 + ')';
-          document.querySelector('#tdValve3').innerHTML=(hardwareStatus.valve3==0 ? 'Open' : 'Closed') + ' (' + hardwareStatus.valve3 + ')';
-          document.querySelector('#tdValve4').innerHTML=(hardwareStatus.valve4==0 ? 'Open' : 'Closed') + ' (' + hardwareStatus.valve4 + ')';
+          $q('#tdGasTemperature').innerHTML=hardwareStatus.gas_temp?.toFixed(1) + ' °C';
+          $q('#tdPressure').innerHTML=hardwareStatus.pressure?.toFixed(1) + ' mbar';
+          $q('#tdPumpPower').innerHTML=parseInt(hardwareStatus.pump_power) + ' %';
+          $q('#tdHeaterPower').innerHTML=parseInt(hardwareStatus.bottom_heater_power) + ' %';
+          $q('#tdHeaterTemperature').innerHTML=hardwareStatus.bottom_heater_temperature?.toFixed(1) + ' °C';
+          $q('#tdFanADCValue').innerHTML=hardwareStatus.fan_adc_value?.toFixed(2);
+          $q('#tdValve1').innerHTML=(hardwareStatus.valve1==100 ? 'Open' : 'Closed') + ' (' + hardwareStatus.valve1 + ')';
+          $q('#tdValve2').innerHTML=(hardwareStatus.valve2==100 ? 'Open' : 'Closed') + ' (' + hardwareStatus.valve2 + ')';
+          $q('#tdValve3').innerHTML=(hardwareStatus.valve3==100 ? 'Open' : 'Closed') + ' (' + hardwareStatus.valve3 + ')';
+          $q('#tdValve4').innerHTML=(hardwareStatus.valve4==100 ? 'Open' : 'Closed') + ' (' + hardwareStatus.valve4 + ')';
         }
 
         function updateUI_setActiveProgram(activeProgram) {       
-          document.querySelector('#tdActiveProgram').innerHTML=activeProgram.programId;
-          document.querySelector('#tdActiveProgram_currentAction').innerHTML=activeProgram.currentAction || '-';
-          document.querySelector('#tdActiveProgram_progress').innerHTML=activeProgram.progress || '-';
-          document.querySelector('#tdActiveProgram_timeElapsed').innerHTML=activeProgram.timeElapsed?.toFixed(2) || '-';
-          document.querySelector('#tdActiveProgram_estimatedTimeLeft').innerHTML=activeProgram.estimatedTimeLeft || '-';
+          $q('#tdActiveProgram').innerHTML=activeProgram.programId;
+          $q('#tdActiveProgram_currentAction').innerHTML=activeProgram.currentAction || '-';
+          $q('#tdActiveProgram_progress').innerHTML=activeProgram.progress || '-';
+          $q('#tdActiveProgram_timeElapsed').innerHTML=activeProgram.timeElapsed?.toFixed(2) || '-';
+          $q('#tdActiveProgram_estimatedTimeLeft').innerHTML=activeProgram.estimatedTimeLeft || '-';
         }
 
         function selectProgram(programId) {
           const programIndex=programId-1;
           AppContext.selectedProgram=AppContext.Programs[programIndex];
 
-          document.querySelector('#divSelectedProgram').innerHTML=
+          $q('#divSelectedProgram').innerHTML=
             `<h4>${AppContext.selectedProgram.id}. ${AppContext.selectedProgram.name}</h4>
              <p class="info-text-small">${AppContext.selectedProgram.description}</p>`;          
 
-          const programButtons = document.querySelectorAll('#divPrograms button');
+          const programButtons = $qall('#divPrograms button');
           for(let i=0;i<programButtons.length;i++)
           {
             programButtons[i].classList.remove("active");
@@ -95,6 +92,24 @@
             }
           }
         }
+
+        function selectTab(tabId) {
+          switch(tabId) {
+            case 0:
+              $q('#divContent1').style.visibility='visible';
+              $q('#divContent2').style.visibility='collapse';
+              break;
+            case 1:
+              $q('#divContent1').style.visibility='collapse';
+              $q('#divContent2').style.visibility='visible';
+              break;
+            case 2:
+              $q('#divContent1').style.visibility='collapse';
+              $q('#divContent2').style.visibility='collapse';
+              break;
+            }
+        }
+
       </script>      
   </head>  
     <body>  
@@ -127,12 +142,12 @@
               </table>
             </div>
             <div class="flex-row gap-8" style="justify-content: end;" >
-              <button id="btnPause" onclick="serverApi_pause()" style="width: 80px;" disabled>Pause</button>
-              <button  id="btnStop" onclick="serverApi_reset()" style="width: 80px;" disabled=>Stop</button>
+              <button id="btnPause" onclick="serverApi_post('/api/pause')" style="width: 80px;" disabled>Pause</button>
+              <button  id="btnStop" onclick="serverApi_post('/api/reset')" style="width: 80px;" disabled=>Stop</button>
             </div>
           </div>
 
-          <div id="divDashboard" class="flex-row gap-8 card">
+          <div id="divContent1" class="flex-row gap-8 card">
             <div id="divPrograms">
             </div>          
             
@@ -143,6 +158,21 @@
               </div>              
             </div>  
           </div>
+
+          <div id="divContent2" style="visibility: collapse;" class="info-text flex-column gap-8">
+            <div id="divLogs" class="card">
+              <h4>Logfiles</h4>
+              <a  href="/logfile" target="_blank"><button>Open logfile</button></a>
+            </div>
+            <div class="card flex-column gap-8">
+              <h4>Open valves for cleaning</h4>
+              <button  id="btnCleanValve1" class="valve-button" onclick="serverApi_post('/api/cleanvalve/1')">Valve 1 - Liquid ch. to extract. ch.</button>
+              <button  id="btnCleanValve2" class="valve-button" onclick="serverApi_post('/api/cleanvalve/2')">Valve 2 - Air to extract ch.</button>
+              <button  id="btnCleanValve3" class="valve-button" onclick="serverApi_post('/api/cleanvalve/3')">Valve 3 - Extract ch. to dist. ch.</button>
+              <button  id="btnCleanValve4" class="valve-button" onclick="serverApi_post('/api/cleanvalve/4')">Valve 4 - Air to dist. ch.</button>
+            </div>
+          </div>
+
           <div id="divHardware" class="card info-text-small flex-row">
             <table >
               <tr><td>Gas temp.:</td><td id="tdGasTemperature"></td></tr>
@@ -150,11 +180,10 @@
               <tr><td>Pump power:</td><td id="tdPumpPower"></td></tr>
               <tr><td>Heater power:</td><td id="tdHeaterPower"></td></tr>
               <tr><td>Heater temp.:</td><td id="tdHeaterTemperature"></td></tr>
-              <tr><td>Fan ADC:</td><td id="tdFanADCValue"></td></tr>
             </table>
             <table style="margin-left:auto" >
               <tr><td>&nbsp;</td><td></td></tr>
-              <tr><td>&nbsp;</td><td></td></tr>
+              <tr><td>Fan ADC:</td><td id="tdFanADCValue"></td></tr>
               <tr><td>Valve 1:</td><td id="tdValve1"></td></tr>
               <tr><td>Valve 2:</td><td id="tdValve2"></td></tr>
               <tr><td>Valve 3:</td><td id="tdValve3"></td></tr>
@@ -165,17 +194,17 @@
         </div><!--divMainContent-->
   
         <div id="bottom-bar" class="gap-8 info-text">
-          <button class="actionbar-button" tabindex="0" type="button">
-            <svg focusable="false" viewBox="0 0 24 24" aria-hidden="true" ><path d="M4 13h6c.55 0 1-.45 1-1V4c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v8c0 .55.45 1 1 1zm0 8h6c.55 0 1-.45 1-1v-4c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v4c0 .55.45 1 1 1zm10 0h6c.55 0 1-.45 1-1v-8c0-.55-.45-1-1-1h-6c-.55 0-1 .45-1 1v8c0 .55.45 1 1 1zM13 4v4c0 .55.45 1 1 1h6c.55 0 1-.45 1-1V4c0-.55-.45-1-1-1h-6c-.55 0-1 .45-1 1z"></path></svg>
+          <button class="actionbar-button" onclick="selectTab(0)" tabindex="0" type="button">
+            <svg focusable="false" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h6c.55 0 1-.45 1-1V4c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v8c0 .55.45 1 1 1zm0 8h6c.55 0 1-.45 1-1v-4c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v4c0 .55.45 1 1 1zm10 0h6c.55 0 1-.45 1-1v-8c0-.55-.45-1-1-1h-6c-.55 0-1 .45-1 1v8c0 .55.45 1 1 1zM13 4v4c0 .55.45 1 1 1h6c.55 0 1-.45 1-1V4c0-.55-.45-1-1-1h-6c-.55 0-1 .45-1 1z"></path></svg>
             <span>Dashboard</span>
           </button>
   
-          <button disabled class="actionbar-button" tabindex="0" type="button">
+          <button class="actionbar-button" onclick="selectTab(1)" tabindex="1" type="button">
             <svg focusable="false" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 2H4c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM8 20H5c-.55 0-1-.45-1-1v-3h4v4zm0-6H4v-4h4v4zm0-6H4V5c0-.55.45-1 1-1h3v4zm6 12h-4v-4h4v4zm0-6h-4v-4h4v4zm0-6h-4V4h4v4zm5 12h-3v-4h4v3c0 .55-.45 1-1 1zm1-6h-4v-4h4v4zm0-6h-4V4h3c.55 0 1 .45 1 1v3z"></path></svg>
             <span>Maintenance</span>
           </button>
   
-          <button disabled class="actionbar-button" tabindex="0" type="button">
+          <button class="actionbar-button" onclick="selectTab(2)" tabindex="2" type="button">
             <svg focusable="false" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"></path></svg>
             <span>Settings</span>
           </button>
@@ -187,7 +216,7 @@
   
   <script>
   (function initUi() {
-    const container = document.querySelector('#divPrograms');
+    const container = $q('#divPrograms');
     for(const prog of AppContext.Programs) {
       const buttonString = `<button class="program" onclick="selectProgram(${prog.id})">${prog.id}. ${prog.name}</button>`;
       const buttonFragment = document.createRange().createContextualFragment(buttonString);

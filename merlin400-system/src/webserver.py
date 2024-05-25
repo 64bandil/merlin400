@@ -1,4 +1,4 @@
-from flask import Flask, render_template,jsonify      
+from flask import Flask, jsonify, send_from_directory
 import sys, time
 import controlthread as controlthread
 from hardware.commands.start_extraction import Command_StartExtraction
@@ -20,18 +20,18 @@ app = Flask(__name__,
             template_folder='../wwwroot')
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 
-@app.route("/api/status")
+@app.route('/', methods = ['GET'])
+def home():
+    return app.send_static_file('index.html')
+
+@app.route("/logfile", methods = ['GET'])
+def get_log_file():
+    return send_from_directory('../logs', 'drizzle_log_2024.txt')
+
+@app.route("/api/status", methods = ['GET'])
 def get_machine_status():
     global control_thread 
     return control_thread.get_machine_json_status()
-
-@app.route('/')
-def home():
-    return render_template('index.html')
-
-@app.route("/logfile.txt")
-def get_log_file():
-    return ""
 
 @app.route("/api/start/<int:programId>", methods = ['POST'])
 def start(programId: int):
@@ -77,7 +77,7 @@ def _process_command(command):
     global control_thread 
     try:
         control_thread.schedule_command_for_execution(command)
-        #Give the controlthread/FSM time to execute command and update status
+        #Give the controlthread time to execute command and update status
         time.sleep(.04)
         return control_thread.get_machine_json_status()
     except Exception as error:
@@ -91,7 +91,6 @@ def _process_command(command):
         )
         return responseJson, 409
 
-
 class ServerThread(threading.Thread):   
     def __init__(self,  controlThread:controlthread.ControlThread, **kwargs):
         super().__init__(**kwargs)
@@ -99,13 +98,11 @@ class ServerThread(threading.Thread):
         global control_thread
         control_thread=controlThread
 
+    def run(self):
         self._server = make_server('0.0.0.0', 80, app)
         self._ctx = app.app_context()
         self._ctx.push()
-
-    def run(self):
         self._server.serve_forever()
 
     def stop(self):
         self._server.shutdown()
-
