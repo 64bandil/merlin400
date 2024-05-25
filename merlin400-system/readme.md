@@ -12,6 +12,7 @@ For installing and starting this software you must use SSH from a computer to lo
     <enter your Merlin's SSID password>
 
     sudo pip install github-clone
+    cd /home/pi
     ghclone https://github.com/64bandil/merlin400/tree/main/merlin400-system    
     sudo cp merlin400-system/merlin400-system.service /etc/systemd/system/
 
@@ -28,3 +29,13 @@ When the application is stopped "Play" button will blink green.
 To start the new application:
 
     sudo systemctl start merlin400-system
+
+
+## Upgrade 
+After installation you can upgrade the application like this:
+    sudo systemctl stop merlin400-system
+    cd /home/pi
+    ghclone https://github.com/64bandil/merlin400/tree/main/merlin400-system
+    sudo systemctl start merlin400-system
+
+This will update installation to latest code in main branch
